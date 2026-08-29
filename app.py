@@ -14,9 +14,14 @@ from dianzhentong.learning import (
     review_cards,
 )
 from dianzhentong.report import DISCLAIMER, build_report
-from dianzhentong.storage import ResilientPracticeRepository, choose_weak_scenario
+from dianzhentong.progress import calculate_experiment_progress, learning_overview
+from dianzhentong.storage import (
+    ResilientPracticeRepository,
+    choose_weak_scenario,
+    make_learning_activity,
+)
 
-UI_STATE_VERSION = "0.8"
+UI_STATE_VERSION = "0.9"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -65,6 +70,24 @@ def open_knowledge(card_id: str | None = None) -> None:
     if card_id:
         st.session_state.selected_knowledge_card = card_id
     set_stage(6)
+
+def progress_map():
+    result = {}
+    for experiment_id in catalog:
+        experiment_knowledge = KnowledgeBase(experiment_id)
+        card_ids = [item["id"] for item in cards_for_experiment(experiment_id)]
+        result[experiment_id] = calculate_experiment_progress(
+            repository, experiment_id, experiment_knowledge.scenario_ids, card_ids
+        )
+    return result
+
+def prepare_task(experiment_id: str, mode: str) -> None:
+    target = KnowledgeBase(experiment_id)
+    st.session_state.selected_experiment_id = experiment_id
+    st.session_state.practice_mode = mode
+    st.session_state.selected_symptom_id = target.default_symptom_id
+    st.session_state.pop("diagnostic_state", None)
+    set_stage(2)
 
 def start_practice(scenario_id: str) -> None:
     new_session = DiagnosticSession(knowledge)
@@ -125,6 +148,31 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
+    current_progress = progress_map()
+    overview = learning_overview(repository, current_progress)
+    tasks = overview["tasks"]
+    recommended_id = overview["recommended_experiment_id"]
+    st.subheader("今日学习任务 · 约10分钟")
+    st.progress(tasks["completion"], text=f"今日完成 {tasks['completed_count']} / 3 项 · 连续学习 {overview['streak']} 天")
+    task_columns = st.columns(3)
+    task_columns[0].metric("知识卡", "已完成" if tasks["knowledge"] else "0 / 1")
+    task_columns[1].metric("引导学习", "已完成" if tasks["guided"] else "0 / 1")
+    task_columns[2].metric("随机练习", f"{min(tasks['random_practices'], 2)} / 2")
+    if not tasks["knowledge"]:
+        if st.button("开始今日知识卡", use_container_width=True):
+            target_cards = cards_for_experiment(recommended_id)
+            learned = repository.learned_cards(recommended_id)
+            target = next((item for item in target_cards if item["id"] not in learned), target_cards[0])
+            st.session_state.selected_experiment_id = recommended_id
+            st.session_state.selected_knowledge_card = target["id"]
+            open_knowledge(target["id"]); st.rerun()
+    if not tasks["guided"]:
+        if st.button("开始今日引导学习", use_container_width=True):
+            prepare_task(recommended_id, "引导学习模式"); st.rerun()
+    if not tasks["practice"]:
+        if st.button("开始今日随机练习", type="primary", use_container_width=True):
+            prepare_task(recommended_id, "随机故障练习"); st.rerun()
+    st.divider()
     st.subheader("选择一个学习实验")
     st.caption("选好实验和练习方式，下一步完成安全确认后即可开始。")
     experiment_options = list(catalog)
@@ -147,7 +195,7 @@ if stage == 1:
     elif mode == "随机故障练习":
         st.info("系统会随机生成故障和对应现象；完成后显示评分与推荐排查顺序。")
     else:
-        st.info("每一步会先解释元件作用，再提供模拟资料供你判断；本模式不计分、不写入学习统计。")
+        st.info("每一步会先解释元件作用，再提供模拟资料供你判断；本模式不计分，但完成后会计入今日学习任务。")
     with st.expander("使用范围与隐私说明"):
         st.write("应用只读取网页内的模拟资料，不连接设备，也不提供真实带电操作指导。")
         st.write("应用不要求姓名、邮箱或账号；练习记录只包含实验、结果、得分和时间。")
@@ -224,8 +272,15 @@ elif stage == 4:
     else:
         result = session.result
         scored_practice = session.scenario_id is not None and st.session_state.get("practice_mode") == "随机故障练习"
+        guided_practice = session.scenario_id is not None and st.session_state.get("practice_mode") == "引导学习模式"
         if scored_practice:
             repository.save(session.to_practice_record())
+        elif guided_practice and session.practice_id:
+            repository.save_activity(
+                make_learning_activity(
+                    knowledge.experiment_id, "guided_session", session.practice_id
+                )
+            )
         st.markdown("### 1. 本次结论")
         st.write(f"**实验：** {knowledge.experiment['name']}")
         st.write(f"**故障现象：** {session.symptom}")
@@ -266,7 +321,7 @@ elif stage == 4:
             st.success(f"推荐路径最终结论：{path['cause']}")
         elif session.scenario_result is not None:
             st.markdown("### 2. 引导学习小结")
-            st.info("本模式不计分，也不会写入学习统计。下面展示本次场景的推荐排查顺序。")
+            st.info("本模式不计分，也不会写入随机练习成绩；完成记录只用于每日学习任务。下面展示推荐排查顺序。")
             path = session.recommended_path()
             assert path is not None
             for index, step in enumerate(path["steps"], 1):
@@ -289,11 +344,47 @@ elif stage == 4:
 
 elif stage == 5:
     st.subheader("📊 学习中心")
-    st.write(f"**当前实验：{knowledge.experiment['name']}**")
     if config.storage_is_temporary:
-        st.warning("云端成绩使用临时存储，服务重启或更新后可能清空。")
+        st.warning("云端成绩与进度使用临时存储，服务重启或更新后可能清空。")
     if not repository.persistent:
         st.warning("SQLite当前不可用，已切换到内存记录；关闭或重启应用后数据会丢失。")
+    all_progress = progress_map()
+    overview = learning_overview(repository, all_progress)
+    tasks = overview["tasks"]
+    top_metrics = st.columns(2)
+    top_metrics[0].metric("连续学习", f"{overview['streak']} 天")
+    top_metrics[1].metric("今日任务", f"{tasks['completed_count']} / 3")
+    st.progress(tasks["completion"], text="今日任务完成度")
+    st.subheader("实验掌握进度")
+    progress_rows = []
+    for experiment_id, item in all_progress.items():
+        progress_rows.append({
+            "实验": catalog[experiment_id]["name"],
+            "掌握度": f"{item.mastery:.0%}",
+            "状态": item.status,
+            "知识卡": f"{item.learned_cards}/{item.total_cards}",
+            "已掌握故障": f"{item.mastered_faults}/{item.total_faults}",
+        })
+    render_markdown_table(["实验", "掌握度", "状态", "知识卡", "已掌握故障"], progress_rows)
+    st.subheader("新手学习路线")
+    selected_route_id = st.selectbox(
+        "查看实验路线", list(catalog),
+        index=list(catalog).index(knowledge.experiment_id),
+        format_func=lambda item: catalog[item]["name"],
+    )
+    route = all_progress[selected_route_id]
+    route_steps = [
+        ("学习知识卡", route.learned_cards == route.total_cards),
+        ("完成引导学习", route.guided_sessions >= 1),
+        ("完成3次随机练习", route.practice_attempts >= 3),
+        ("掌握全部故障", route.mastered_faults == route.total_faults),
+    ]
+    for item, completed in route_steps:
+        marker = "✅" if completed else ("👉" if item == route.route_stage else "▫️")
+        st.write(f"{marker} {item}")
+    st.info(f"当前阶段：{route.route_stage}")
+    st.divider()
+    st.write(f"**当前实验详细统计：{knowledge.experiment['name']}**")
     summary = repository.summary(experiment_id=knowledge.experiment_id)
     stats = repository.fault_stats(scenario_ids, experiment_id=knowledge.experiment_id)
     recent = repository.recent(10, experiment_id=knowledge.experiment_id)
@@ -325,8 +416,8 @@ elif stage == 5:
         recent_rows = [{"时间": item["completed_at"].replace("T", " ")[:19], "预设故障": knowledge.results[item["scenario_id"]]["cause"], "诊断": "正确" if item["matched"] else "错误", "判断得分": f"{item['correct_judgments']}/{item['total_judgments']}", "不确定": item["uncertain_count"]} for item in recent]
         render_markdown_table(["时间", "预设故障", "诊断", "判断得分", "不确定"], recent_rows)
         with st.expander("清空学习记录"):
-            st.warning("清空后无法恢复，但不会影响故障知识库和应用功能。")
-            confirm_clear = st.checkbox("我确认删除全部本地练习记录")
+            st.warning("清空后，练习成绩、知识卡标记、引导记录和连续天数都无法恢复；不会影响故障知识库。")
+            confirm_clear = st.checkbox("我确认删除全部本地学习与练习记录")
             if st.button("永久清空", disabled=not confirm_clear):
                 repository.clear(confirmed=True); st.success("学习记录已清空。"); st.rerun()
     if st.button("返回实验首页", use_container_width=True):
@@ -361,6 +452,17 @@ elif stage == 6:
     st.warning(f"**异常模拟状态：** {card['abnormal']}")
     st.write(f"**复习要点：** {card['review']}")
     st.caption(REVIEW_STATUS)
+    learned_cards = repository.learned_cards(knowledge.experiment_id)
+    if selected_card_id in learned_cards:
+        st.success("这张知识卡已标记为学过，可以继续复习。")
+    elif st.button("标记为已学习", type="primary", use_container_width=True):
+        repository.save_activity(
+            make_learning_activity(
+                knowledge.experiment_id, "knowledge_card", selected_card_id
+            )
+        )
+        st.success("已记录学习进度。")
+        st.rerun()
     if st.button("练习当前实验", type="primary", use_container_width=True):
         st.session_state.pop("diagnostic_state", None); set_stage(1); st.rerun()
     if st.button("返回学习中心", use_container_width=True):

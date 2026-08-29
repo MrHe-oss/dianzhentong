@@ -7,11 +7,15 @@ import os
 import secrets
 import sqlite3
 from dataclasses import asdict, dataclass
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Sequence
+from zoneinfo import ZoneInfo
 
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "practice.db"
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+ACTIVITY_TYPES = {"knowledge_card", "guided_session"}
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,57 @@ class PracticeRecord:
         row["matched"] = int(self.matched)
         row["wrong_nodes"] = json.dumps(self.wrong_nodes, ensure_ascii=False)
         return row
+
+
+@dataclass(frozen=True)
+class LearningActivity:
+    activity_id: str
+    occurred_at: str
+    local_date: str
+    experiment_id: str
+    activity_type: str
+    reference_id: str
+
+    def __post_init__(self) -> None:
+        if self.activity_type not in ACTIVITY_TYPES:
+            raise ValueError(f"未知学习活动类型：{self.activity_type}")
+
+    def as_row(self) -> dict[str, str]:
+        return asdict(self)
+
+
+def beijing_now() -> datetime:
+    return datetime.now(BEIJING_TZ)
+
+
+def beijing_date_from_iso(value: str) -> date:
+    moment = datetime.fromisoformat(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(BEIJING_TZ).date()
+
+
+def make_learning_activity(
+    experiment_id: str,
+    activity_type: str,
+    reference_id: str,
+    occurred_at: datetime | None = None,
+) -> LearningActivity:
+    moment = (occurred_at or beijing_now()).astimezone(BEIJING_TZ)
+    if activity_type == "knowledge_card":
+        activity_id = f"knowledge:{experiment_id}:{reference_id}"
+    elif activity_type == "guided_session":
+        activity_id = f"guided:{reference_id}"
+    else:
+        raise ValueError(f"未知学习活动类型：{activity_type}")
+    return LearningActivity(
+        activity_id=activity_id,
+        occurred_at=moment.isoformat(timespec="seconds"),
+        local_date=moment.date().isoformat(),
+        experiment_id=experiment_id,
+        activity_type=activity_type,
+        reference_id=reference_id,
+    )
 
 
 def resolve_db_path(path: Path | str | None = None) -> Path:
@@ -78,6 +133,20 @@ class PracticeRepository:
                     "ALTER TABLE practice_records ADD COLUMN experiment_id "
                     "TEXT NOT NULL DEFAULT 'motor_dol_no_start'"
                 )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS learning_activities (
+                    activity_id TEXT PRIMARY KEY,
+                    occurred_at TEXT NOT NULL,
+                    local_date TEXT NOT NULL,
+                    experiment_id TEXT NOT NULL,
+                    activity_type TEXT NOT NULL CHECK (
+                        activity_type IN ('knowledge_card', 'guided_session')
+                    ),
+                    reference_id TEXT NOT NULL
+                )
+                """
+            )
 
     def save(self, record: PracticeRecord) -> bool:
         row = record.as_row()
@@ -182,12 +251,68 @@ class PracticeRepository:
             result.append(item)
         return result
 
+    def save_activity(self, activity: LearningActivity) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO learning_activities (
+                    activity_id, occurred_at, local_date, experiment_id,
+                    activity_type, reference_id
+                ) VALUES (
+                    :activity_id, :occurred_at, :local_date, :experiment_id,
+                    :activity_type, :reference_id
+                )
+                """,
+                activity.as_row(),
+            )
+        return cursor.rowcount == 1
+
+    def activities(self, experiment_id: str | None = None) -> list[dict[str, str]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM learning_activities
+                WHERE (? IS NULL OR experiment_id = ?)
+                ORDER BY occurred_at DESC, rowid DESC
+                """,
+                (experiment_id, experiment_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def learned_cards(self, experiment_id: str) -> set[str]:
+        return {
+            item["reference_id"] for item in self.activities(experiment_id)
+            if item["activity_type"] == "knowledge_card"
+        }
+
+    def active_dates(self) -> set[date]:
+        dates = {date.fromisoformat(item["local_date"]) for item in self.activities()}
+        with self.connect() as connection:
+            rows = connection.execute("SELECT completed_at FROM practice_records").fetchall()
+        dates.update(beijing_date_from_iso(row["completed_at"]) for row in rows)
+        return dates
+
+    def today_progress(self, today: date | None = None) -> dict[str, int]:
+        current = today or beijing_now().date()
+        day_text = current.isoformat()
+        activities = [item for item in self.activities() if item["local_date"] == day_text]
+        with self.connect() as connection:
+            rows = connection.execute("SELECT completed_at FROM practice_records").fetchall()
+        return {
+            "knowledge_cards": sum(item["activity_type"] == "knowledge_card" for item in activities),
+            "guided_sessions": sum(item["activity_type"] == "guided_session" for item in activities),
+            "random_practices": sum(
+                beijing_date_from_iso(row["completed_at"]) == current for row in rows
+            ),
+        }
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
         with self.connect() as connection:
-            cursor = connection.execute("DELETE FROM practice_records")
-        return cursor.rowcount
+            practice_cursor = connection.execute("DELETE FROM practice_records")
+            activity_cursor = connection.execute("DELETE FROM learning_activities")
+        return practice_cursor.rowcount + activity_cursor.rowcount
 
 
 class MemoryPracticeRepository:
@@ -195,6 +320,7 @@ class MemoryPracticeRepository:
 
     def __init__(self):
         self.records: dict[str, PracticeRecord] = {}
+        self.learning_records: dict[str, LearningActivity] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -255,11 +381,50 @@ class MemoryPracticeRepository:
             for record in self._selected(experiment_id)[: max(1, min(int(limit), 100))]
         ]
 
+    def save_activity(self, activity: LearningActivity) -> bool:
+        if activity.activity_id in self.learning_records:
+            return False
+        self.learning_records[activity.activity_id] = activity
+        return True
+
+    def activities(self, experiment_id: str | None = None) -> list[dict[str, str]]:
+        records = list(self.learning_records.values())
+        if experiment_id:
+            records = [item for item in records if item.experiment_id == experiment_id]
+        return [item.as_row() for item in sorted(records, key=lambda item: item.occurred_at, reverse=True)]
+
+    def learned_cards(self, experiment_id: str) -> set[str]:
+        return {
+            item.reference_id for item in self.learning_records.values()
+            if item.experiment_id == experiment_id and item.activity_type == "knowledge_card"
+        }
+
+    def active_dates(self) -> set[date]:
+        dates = {date.fromisoformat(item.local_date) for item in self.learning_records.values()}
+        dates.update(beijing_date_from_iso(item.completed_at) for item in self.records.values())
+        return dates
+
+    def today_progress(self, today: date | None = None) -> dict[str, int]:
+        current = today or beijing_now().date()
+        activities = [
+            item for item in self.learning_records.values()
+            if date.fromisoformat(item.local_date) == current
+        ]
+        return {
+            "knowledge_cards": sum(item.activity_type == "knowledge_card" for item in activities),
+            "guided_sessions": sum(item.activity_type == "guided_session" for item in activities),
+            "random_practices": sum(
+                beijing_date_from_iso(item.completed_at) == current for item in self.records.values()
+            ),
+        }
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
         count = len(self.records)
         self.records.clear()
+        count += len(self.learning_records)
+        self.learning_records.clear()
         return count
 
 
@@ -299,6 +464,21 @@ class ResilientPracticeRepository:
     def recent(self, limit: int = 10, experiment_id: str | None = None) -> list[dict[str, Any]]:
         return self._call("recent", limit, experiment_id)
 
+    def save_activity(self, activity: LearningActivity) -> bool:
+        return bool(self._call("save_activity", activity))
+
+    def activities(self, experiment_id: str | None = None) -> list[dict[str, str]]:
+        return self._call("activities", experiment_id)
+
+    def learned_cards(self, experiment_id: str) -> set[str]:
+        return self._call("learned_cards", experiment_id)
+
+    def active_dates(self) -> set[date]:
+        return self._call("active_dates")
+
+    def today_progress(self, today: date | None = None) -> dict[str, int]:
+        return self._call("today_progress", today)
+
     def clear(self, confirmed: bool = False) -> int:
         return int(self._call("clear", confirmed))
 
@@ -325,3 +505,13 @@ def choose_weak_scenario(
     best_priority = max(priority(item) for item in candidates)
     weakest = [item for item in candidates if priority(item) == best_priority]
     return chooser(weakest)
+
+
+def learning_streak(active_dates: set[date], today: date | None = None) -> int:
+    current = today or beijing_now().date()
+    cursor = current if current in active_dates else current - timedelta(days=1)
+    streak = 0
+    while cursor in active_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak

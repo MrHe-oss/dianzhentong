@@ -5,7 +5,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from dianzhentong.engine import DiagnosticSession, KnowledgeBase, SessionError
-from dianzhentong.storage import PracticeRecord, PracticeRepository, choose_weak_scenario
+from dianzhentong.storage import (
+    PracticeRecord,
+    PracticeRepository,
+    choose_weak_scenario,
+    make_learning_activity,
+)
 
 
 @pytest.fixture
@@ -90,10 +95,14 @@ def test_recent_is_reverse_chronological_and_limited(repository):
 
 def test_clear_requires_confirmation(repository):
     repository.save(record("one"))
+    repository.save_activity(
+        make_learning_activity("motor_dol_no_start", "knowledge_card", "fuse")
+    )
     assert repository.clear(confirmed=False) == 0
     assert repository.summary()["attempts"] == 1
-    assert repository.clear(confirmed=True) == 1
+    assert repository.clear(confirmed=True) == 2
     assert repository.summary()["attempts"] == 0
+    assert repository.activities() == []
 
 
 def test_no_data_uses_uniform_candidate_list():
