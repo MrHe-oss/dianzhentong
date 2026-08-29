@@ -46,6 +46,12 @@ def test_all_forward_reverse_scenarios_have_unique_solvable_paths(scenario_id):
     assert session.result_id == scenario_id
     assert session.scenario_result["symptom_id"] == session.symptom_id
     assert all(item["is_correct"] is True for item in session.history)
+    path = session.recommended_path()
+    assert path is not None
+    assert path["result_id"] == scenario_id
+    assert [step["node_id"] for step in path["steps"]] == [
+        item["node_id"] for item in session.history
+    ]
 
 
 @pytest.mark.parametrize("scenario_id", REVERSE_CASES)
@@ -164,4 +170,3 @@ def test_statistics_are_isolated_by_experiment(tmp_path):
     assert repository.summary()["attempts"] == 2
     assert repository.summary(experiment_id=DEFAULT_EXPERIMENT_ID)["attempts"] == 1
     assert repository.summary(experiment_id="motor_forward_reverse")["attempts"] == 1
-

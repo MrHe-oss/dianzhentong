@@ -76,3 +76,20 @@ def test_invalid_scenario_is_rejected():
     with pytest.raises(SessionError):
         session.start(True, scenario_id="unknown")
 
+
+@pytest.mark.parametrize("scenario_id", [item[0] for item in SCENARIOS])
+def test_direct_start_recommended_path_reaches_hidden_scenario(scenario_id):
+    session = DiagnosticSession(KnowledgeBase())
+    session.start(True, scenario_id=scenario_id)
+    path = session.recommended_path()
+    assert path is not None
+    assert path["result_id"] == scenario_id
+    assert path["cause"] == session.scenario_result["cause"]
+    assert path["steps"][-1]["answer"] == "异常"
+    assert all(step["observation"] for step in path["steps"])
+
+
+def test_free_diagnosis_has_no_recommended_answer_path():
+    session = DiagnosticSession(KnowledgeBase())
+    session.start(True)
+    assert session.recommended_path() is None

@@ -9,7 +9,6 @@ from dianzhentong.config import (
     LOCAL_ENV,
     detect_environment,
     load_config,
-    valid_feedback_url,
     valid_issues_url,
 )
 from dianzhentong.engine import DiagnosticSession, KnowledgeBase
@@ -72,42 +71,12 @@ def test_valid_github_issues_urls_are_kept():
     assert valid_issues_url(url) == url
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        None,
-        "",
-        "http://wj.qq.com/s2/12345/",
-        "https://example.com/s2/12345/",
-        "https://user@wj.qq.com/s2/12345/",
-        "https://user:secret@wj.qq.com/s2/12345/",
-        "https://wj.qq.com/",
-        "not-a-url",
-    ],
-)
-def test_invalid_tencent_feedback_urls_are_hidden(url):
-    assert valid_feedback_url(url) is None
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://wj.qq.com/s2/12345/",
-        "https://test.wj.qq.com/s2/12345/?source=dianzhentong",
-    ],
-)
-def test_valid_tencent_feedback_urls_are_kept(url):
-    assert valid_feedback_url(url) == url
-
-
-def test_feedback_url_is_loaded_in_cloud_and_missing_is_safe():
-    url = "https://wj.qq.com/s2/12345/"
+def test_retired_feedback_environment_value_is_ignored():
     configured = load_config(
-        {"DIANZHENTONG_ENV": "community_cloud", "DIANZHENTONG_FEEDBACK_URL": url}
+        {"DIANZHENTONG_ENV": "community_cloud", "DIANZHENTONG_FEEDBACK_URL": "invalid"}
     )
-    assert configured.feedback_url == url
     assert configured.environment == CLOUD_ENV
-    assert load_config({}).feedback_url is None
+    assert not hasattr(configured, "feedback_url")
 
 
 def test_unwritable_database_falls_back_and_practice_still_saves(tmp_path):
@@ -140,15 +109,22 @@ def test_deployment_files_exist():
         "runtime.txt", ".streamlit/config.toml", "LICENSE", "CONTRIBUTING.md",
         ".github/ISSUE_TEMPLATE/bug_report.yml",
         ".github/ISSUE_TEMPLATE/experience.yml",
-        ".github/ISSUE_TEMPLATE/content_correction.yml", "VALIDATION_GUIDE.md",
+        ".github/ISSUE_TEMPLATE/content_correction.yml",
     ]
     assert all(Path(path).exists() for path in required)
 
 
-def test_feedback_entry_points_and_issue_entry_remain_distinct():
+def test_questionnaire_is_removed_but_issue_entry_remains():
     source = Path("app.py").read_text(encoding="utf-8")
-    assert source.count("config.feedback_url") >= 3
-    assert "完成1分钟体验反馈" in source
-    assert "填写1分钟匿名体验反馈" in source
+    config_source = Path("dianzhentong/config.py").read_text(encoding="utf-8")
+    assert "feedback_url" not in source
+    assert "DIANZHENTONG_FEEDBACK_URL" not in config_source
     assert "程序故障或专业纠错" in source
-    assert "应用不会自动" in source
+
+
+def test_four_step_ui_and_mobile_theme_are_present():
+    source = Path("app.py").read_text(encoding="utf-8")
+    assert 'steps = ["选择实验", "安全确认", "逐步排查", "学习报告"]' in source
+    assert "stage / 4" in source
+    assert "UI_STATE_VERSION" in source
+    assert "@media(max-width:640px)" in source

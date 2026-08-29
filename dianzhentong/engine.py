@@ -217,6 +217,40 @@ class DiagnosticSession:
     def uncertain_count(self) -> int:
         return sum(item["answer"] == "不确定" for item in self.history)
 
+    def recommended_path(self) -> dict[str, Any] | None:
+        """按隐藏场景和既有规则生成标准教学路径；自由诊断没有标准答案。"""
+        if self.scenario_id is None:
+            return None
+        replay = DiagnosticSession(self.knowledge)
+        replay.start(True, scenario_id=self.scenario_id)
+        steps: list[dict[str, Any]] = []
+        limit = len(self.knowledge.nodes) + 1
+        while not replay.is_complete:
+            if len(steps) >= limit:
+                raise KnowledgeError("生成推荐路径时检测到循环")
+            node = replay.current_node
+            answer = replay.expected_answer
+            if node is None or answer is None:
+                raise KnowledgeError("随机场景缺少推荐路径信息")
+            steps.append(
+                {
+                    "node_id": node["id"],
+                    "object": node["object"],
+                    "answer": answer,
+                    "observation": node["scenario_observations"][answer],
+                    "expected": node["expected"],
+                }
+            )
+            replay.answer(answer)
+        result = replay.result
+        if result is None:
+            raise KnowledgeError("推荐路径没有诊断结果")
+        return {
+            "steps": tuple(steps),
+            "result_id": replay.result_id,
+            "cause": result["cause"],
+        }
+
     def to_practice_record(self, completed_at: str | None = None) -> PracticeRecord:
         if not self.is_complete or self.scenario_id is None or self.practice_id is None:
             raise SessionError("只有完成的随机练习才能保存学习记录")

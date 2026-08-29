@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-APP_VERSION = "0.6"
+APP_VERSION = "0.7"
 LOCAL_ENV = "local"
 CLOUD_ENV = "community_cloud"
 
@@ -42,32 +42,12 @@ def valid_issues_url(value: str | None) -> str | None:
     return candidate
 
 
-def valid_feedback_url(value: str | None) -> str | None:
-    """只接受腾讯问卷 HTTPS 地址，避免把反馈按钮指向未知站点。"""
-    if not value:
-        return None
-    candidate = value.strip()
-    parsed = urlparse(candidate)
-    hostname = (parsed.hostname or "").lower()
-    if (
-        parsed.scheme != "https"
-        or parsed.username
-        or parsed.password
-        or not hostname
-        or not (hostname == "wj.qq.com" or hostname.endswith(".wj.qq.com"))
-        or not parsed.path.strip("/")
-    ):
-        return None
-    return candidate
-
-
 @dataclass(frozen=True)
 class AppConfig:
     environment: str
     storage_path: Path
     storage_is_temporary: bool
     issues_url: str | None
-    feedback_url: str | None
     version: str = APP_VERSION
 
     @property
@@ -93,5 +73,4 @@ def load_config(environ: dict[str, str] | None = None) -> AppConfig:
         storage_path=path,
         storage_is_temporary=temporary,
         issues_url=valid_issues_url(values.get("DIANZHENTONG_ISSUES_URL")),
-        feedback_url=valid_feedback_url(values.get("DIANZHENTONG_FEEDBACK_URL")),
     )

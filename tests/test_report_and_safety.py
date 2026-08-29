@@ -50,3 +50,26 @@ def test_every_result_has_source_and_review_status():
         assert result["source"]
         assert result["confidence"]
 
+
+def test_practice_report_contains_wrong_reason_and_recommended_path():
+    session = DiagnosticSession(KnowledgeBase())
+    session.start(True, scenario_id="cause_fuse")
+    session.answer("异常")
+    report = build_report(session)
+    assert "错因分析" in report
+    assert "你的判断：异常；正确判断：正常" in report
+    assert "推荐排查顺序" in report
+    assert "控制回路熔断器（模拟） → 异常" in report
+    assert "最终故障：模拟熔断器断路" in report
+
+
+def test_correct_practice_report_says_no_wrong_judgment():
+    session = DiagnosticSession(KnowledgeBase())
+    session.start(True, scenario_id="cause_control_power")
+    session.answer("异常")
+    assert "判断过程正确，无错误判断" in build_report(session)
+
+
+def test_free_report_does_not_invent_recommended_path():
+    report = build_report(completed_session())
+    assert "推荐排查顺序" not in report

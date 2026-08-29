@@ -1,6 +1,6 @@
 # 电诊通（Dianzhentong）
 
-电诊通是面向电气工程及其自动化专业学生的故障排查教学原型。公开测试版 v0.6 提供“三相异步电动机直接启动”和“三相异步电动机正反转控制”两个实验，支持随机隐藏故障、自动评分、错题复盘、薄弱项练习、按实验统计和匿名体验反馈。
+电诊通是面向电气工程及其自动化专业学生的故障排查教学原型。公开测试版 v0.7 提供“三相异步电动机直接启动”和“三相异步电动机正反转控制”两个实验，支持随机隐藏故障、自动评分、错因分析、推荐排查顺序、薄弱项练习和按实验统计。
 
 > **仅用于教学模拟。** 不得用于真实设备诊断，不得替代持证电工、设备说明书或现场安全规程。本项目不提供带电测量、拆线、短接、送电或强制设备动作的指导。
 
@@ -39,7 +39,6 @@ python -m pytest -q
 | `DIANZHENTONG_ENV` | `local` 或 `community_cloud`；未设置时尝试自动识别 |
 | `DIANZHENTONG_DB_PATH` | 覆盖SQLite数据库位置 |
 | `DIANZHENTONG_ISSUES_URL` | 完整的HTTPS GitHub Issues地址；未配置时隐藏反馈按钮 |
-| `DIANZHENTONG_FEEDBACK_URL` | 腾讯问卷HTTPS地址；未配置或无效时隐藏匿名问卷按钮 |
 
 本机数据默认保存在 `data/practice.db`，该文件已被Git忽略。Community Cloud默认使用系统临时目录，服务休眠、重启或更新后数据可能丢失。若SQLite不可用，应用会退化为内存记录，练习与报告功能仍可使用。
 
@@ -53,7 +52,6 @@ python -m pytest -q
    ```toml
    DIANZHENTONG_ENV = "community_cloud"
    DIANZHENTONG_ISSUES_URL = "https://github.com/MrHe-oss/dianzhentong/issues/new/choose"
-   DIANZHENTONG_FEEDBACK_URL = "https://wj.qq.com/s2/你的问卷编号/"
    ```
 
 5. 部署后检查首页、两个实验、报告下载和学习中心，并确认页面显示“临时数据模式”。
@@ -71,6 +69,6 @@ python -m pytest -q
 
 ## 反馈与贡献
 
-普通体验反馈使用匿名腾讯问卷；程序故障和专业内容纠错使用GitHub Issue模板。问卷不要求姓名、手机号、邮箱或学校，应用也不会自动向问卷传输练习结果。不要上传真实设备、单位、人员或生产信息。完整的首轮验证流程和发布文案见 [VALIDATION_GUIDE.md](VALIDATION_GUIDE.md)，安全要求参见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [SECURITY.md](SECURITY.md)。
+程序故障和专业内容纠错使用GitHub Issue模板。不要上传真实设备、单位、人员或生产信息。参见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [SECURITY.md](SECURITY.md)。
 
 本项目采用 [MIT License](LICENSE)。
