@@ -14,6 +14,7 @@ from dianzhentong.learning import (
     relationship_steps,
     review_cards,
 )
+from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
 import dianzhentong.storage as storage_module
@@ -26,7 +27,7 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "0.9"
+UI_STATE_VERSION = "1.0"
 STORAGE_CACHE_VERSION = "0.9-progress-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -293,6 +294,13 @@ elif stage == 4:
         st.write(f"**故障现象：** {session.symptom}")
         (st.warning if knowledge.is_inconclusive(session.result_id or "") else st.success)(result["cause"])
         st.write(result["explanation"])
+        insight = insight_for_result(session.result_id)
+        if insight:
+            st.markdown("### 💡 学会这个故障")
+            st.info(f"**为什么这样判断**\n\n{insight['why']}")
+            with st.expander("容易混淆的故障"):
+                st.write(insight["confusion"])
+            st.success(f"**记忆提示：** {insight['memory']}")
         with st.expander("查看证据、来源与可信度"):
             st.write(f"**证据：** {result['evidence']}")
             st.write(f"**依据来源：** {result['source']}")

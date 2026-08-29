@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .engine import DiagnosticSession
+from .insights import insight_for_result
 
 
 DISCLAIMER = (
@@ -23,6 +24,7 @@ def build_report(
     moment = generated_at or datetime.now()
     experiment = session.knowledge.experiment
     result = session.result
+    insight = insight_for_result(session.result_id)
     lines = [
         "电诊通｜教学诊断报告",
         "=" * 28,
@@ -39,6 +41,17 @@ def build_report(
         f"依据来源：{result['source']}",
         f"可信度：{result['confidence']}",
     ]
+    if insight:
+        lines.extend(
+            [
+                "",
+                "学习解释",
+                "-" * 28,
+                f"为什么这样判断：{insight['why']}",
+                f"容易混淆：{insight['confusion']}",
+                f"记忆提示：{insight['memory']}",
+            ]
+        )
     if session.scenario_result is not None and include_score:
         correct, total = session.score
         matched = session.result_id == session.scenario_id
