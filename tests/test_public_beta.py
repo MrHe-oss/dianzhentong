@@ -157,3 +157,13 @@ def test_storage_hot_upgrade_invalidates_old_cloud_cache():
     assert "importlib.reload(storage_module)" in source
     assert "STORAGE_CACHE_VERSION" in source
     assert "create_repository(str(config.storage_path), STORAGE_CACHE_VERSION)" in source
+
+
+def test_beginner_onboarding_and_example_are_present():
+    source = Path("app.py").read_text(encoding="utf-8")
+    assert 'set_stage(7)' in source
+    assert "1分钟新手引导" in source
+    assert "阅读模拟资料" in source
+    assert "这个模拟状态应如何判断" in source
+    assert "不计分、不保存成绩" in source
+    assert "onboarding_seen" in source

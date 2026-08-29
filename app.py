@@ -27,7 +27,7 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.0"
+UI_STATE_VERSION = "1.1"
 STORAGE_CACHE_VERSION = "0.9-progress-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -125,7 +125,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6}:
+if stage not in {1, 2, 3, 4, 5, 6, 7}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -147,6 +147,8 @@ with st.sidebar:
         set_stage(5); st.rerun()
     if st.button("📘 知识中心", use_container_width=True):
         open_knowledge(); st.rerun()
+    if st.button("🧭 第一次使用", use_container_width=True):
+        set_stage(7); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
         with st.expander("查看检查记录"):
@@ -156,6 +158,10 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
+    if not st.session_state.get("onboarding_seen"):
+        st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
+        if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
+            set_stage(7); st.rerun()
     current_progress = progress_map()
     overview = learning_overview(repository, current_progress)
     tasks = overview["tasks"]
@@ -482,3 +488,38 @@ elif stage == 6:
         st.session_state.pop("diagnostic_state", None); set_stage(1); st.rerun()
     if st.button("返回学习中心", use_container_width=True):
         set_stage(5); st.rerun()
+
+elif stage == 7:
+    st.subheader("🧭 1分钟新手引导")
+    st.caption("这是一个不计分、不保存成绩的纯模拟示例。")
+    guide_columns = st.columns(3)
+    guide_cards = (
+        ("1. 选择实验", "先看故障现象，再选择直接启动或正反转实验。新手建议先用引导学习模式。"),
+        ("2. 阅读模拟资料", "只根据网页状态卡判断，不联想或操作真实设备。先找到检查对象，再对照预期状态。"),
+        ("3. 选择答案", "与预期一致选‘正常’，不一致选‘异常’；资料不足或术语没看懂时选‘不确定’。"),
+    )
+    for column, (title, text) in zip(guide_columns, guide_cards):
+        with column:
+            st.markdown(f'<div class="dzt-card"><h3>{title}</h3><p>{text}</p></div>', unsafe_allow_html=True)
+
+    st.markdown("### 试一题")
+    st.write("**检查对象：** 停止按钮常闭触点（模拟）")
+    st.write("**预期状态：** 按钮未按下时，常闭触点应导通。")
+    st.info("**模拟状态卡：** 停止按钮未按下，常闭触点显示导通。")
+    onboarding_answer = st.radio(
+        "这个模拟状态应如何判断？",
+        ["正常", "异常", "不确定"],
+        index=None,
+        horizontal=True,
+        key="onboarding_answer",
+    )
+    if onboarding_answer == "正常":
+        st.success("回答正确：模拟状态与预期状态一致，所以判断为‘正常’。")
+        st.caption("记忆：停止按钮常用常闭触点，未按下时应导通。")
+    elif onboarding_answer:
+        st.warning("再对照一次：状态卡显示‘导通’，与预期状态完全一致，因此应选‘正常’。")
+
+    st.warning("新手引导和正式练习都只使用网页模拟资料，不得用于真实设备诊断。")
+    if st.button("我已学会，返回选择实验", type="primary", use_container_width=True):
+        st.session_state.onboarding_seen = True
+        set_stage(1); st.rerun()
