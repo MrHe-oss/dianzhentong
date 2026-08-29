@@ -3,10 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
-from .storage import learning_streak
+
+
+def learning_streak(active_dates: set[date], today: date) -> int:
+    """计算连续活跃天数；当天尚未开始时允许从昨天延续。"""
+    cursor = today if today in active_dates else today - timedelta(days=1)
+    streak = 0
+    while cursor in active_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def beijing_today() -> date:
+    return datetime.now(ZoneInfo("Asia/Shanghai")).date()
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,6 @@ def learning_overview(
     )
     return {
         "tasks": daily_task_status(repository, all_cards_learned, today),
-        "streak": learning_streak(repository.active_dates(), today),
+        "streak": learning_streak(repository.active_dates(), today or beijing_today()),
         "recommended_experiment_id": weakest.experiment_id,
     }

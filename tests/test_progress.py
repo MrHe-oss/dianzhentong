@@ -8,6 +8,7 @@ import pytest
 from dianzhentong.progress import (
     calculate_experiment_progress,
     daily_task_status,
+    learning_streak,
     learning_overview,
 )
 from dianzhentong.storage import (
@@ -17,7 +18,6 @@ from dianzhentong.storage import (
     PracticeRepository,
     ResilientPracticeRepository,
     beijing_date_from_iso,
-    learning_streak,
     make_learning_activity,
 )
 

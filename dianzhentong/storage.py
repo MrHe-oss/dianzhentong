@@ -7,7 +7,7 @@ import os
 import secrets
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Sequence
 from zoneinfo import ZoneInfo
@@ -505,13 +505,3 @@ def choose_weak_scenario(
     best_priority = max(priority(item) for item in candidates)
     weakest = [item for item in candidates if priority(item) == best_priority]
     return chooser(weakest)
-
-
-def learning_streak(active_dates: set[date], today: date | None = None) -> int:
-    current = today or beijing_now().date()
-    cursor = current if current in active_dates else current - timedelta(days=1)
-    streak = 0
-    while cursor in active_dates:
-        streak += 1
-        cursor -= timedelta(days=1)
-    return streak
