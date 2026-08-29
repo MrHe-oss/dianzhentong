@@ -110,8 +110,10 @@ with st.sidebar:
     st.write(knowledge.experiment["name"])
     st.caption(knowledge.experiment["scope"])
     st.warning("仅限教学模拟，不可用于真实设备诊断。")
+    if config.feedback_url:
+        st.link_button("📝 1分钟匿名体验反馈", config.feedback_url, use_container_width=True)
     if config.issues_url:
-        st.link_button("💬 提交问题或建议", config.issues_url, use_container_width=True)
+        st.link_button("🛠️ 程序故障或专业纠错", config.issues_url, use_container_width=True)
     if st.button("📊 学习中心", use_container_width=True):
         set_stage(7)
         st.rerun()
@@ -127,6 +129,7 @@ with st.sidebar:
 if stage == 1:
     st.subheader("产品说明")
     st.success("🧪 公开测试版：欢迎体验两个电机控制故障排查实验。")
+    st.markdown("**首批用户验证：请完成一次随机故障练习，再填写1分钟匿名问卷。**")
     st.info("本原型帮助学生学习排查思路，不连接设备，也不提供真实带电操作指导。")
     st.write("你将阅读模拟状态，依次回答“正常、异常、不确定”，系统依据固定故障树生成过程记录。")
     if config.storage_is_temporary or not repository.persistent:
@@ -137,8 +140,11 @@ if stage == 1:
         st.write("本应用不要求姓名、邮箱或账号，不主动收集个人身份信息。")
         st.write("练习记录只包含实验、诊断结果、得分、错题节点和完成时间。")
         st.write("公开测试版不承诺云端练习记录长期保存。请勿提交真实设备、单位或人员的敏感信息。")
+        st.write("体验问卷不要求姓名、手机号、邮箱或学校，是否提交完全自愿；应用不会自动向问卷传输练习数据。")
+    if config.feedback_url:
+        st.link_button("完成练习后填写1分钟匿名问卷", config.feedback_url)
     if config.issues_url:
-        st.link_button("提交测试反馈", config.issues_url)
+        st.link_button("报告程序故障或提交专业内容纠错", config.issues_url)
     st.warning(DISCLAIMER)
     if st.button("我已了解，查看实验", type="primary"):
         set_stage(2)
@@ -303,6 +309,17 @@ elif stage == 6:
             else:
                 st.write("**本次错题：** 无")
 
+            if config.feedback_url:
+                st.divider()
+                st.subheader("匿名体验反馈")
+                st.caption("填写问卷时可参考以下结果；这些信息不会由应用自动发送。")
+                st.write(f"**实验名称：** {knowledge.experiment['name']}")
+                st.write(f"**诊断是否正确：** {'是' if matched else '否'}")
+                st.write(f"**判断正确率：** {f'{correct / total:.0%}' if total else '无有效判断'}")
+                st.write(f"**不确定次数：** {session.uncertain_count}")
+                st.link_button("完成1分钟体验反馈", config.feedback_url, type="primary")
+                st.caption("问卷不要求身份信息，是否提交完全自愿。请勿填写真实设备、单位、人员或生产信息。")
+
         with st.expander("完整检查记录", expanded=True):
             for index, item in enumerate(session.history, 1):
                 grade = ""
@@ -333,6 +350,9 @@ elif stage == 6:
 elif stage == 7:
     st.subheader("📊 学习中心")
     st.write(f"**当前实验：{knowledge.experiment['name']}**")
+    if config.feedback_url:
+        st.info("完成练习后，欢迎填写1分钟匿名问卷，帮助改进诊断流程和术语解释。")
+        st.link_button("填写1分钟匿名体验反馈", config.feedback_url)
     if config.storage_is_temporary:
         st.warning("云端成绩使用临时存储，服务重启或更新后可能清空。")
     if not repository.persistent:
