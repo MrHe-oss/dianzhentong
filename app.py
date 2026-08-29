@@ -1,6 +1,7 @@
 """电诊通 Streamlit 教学原型。"""
 from __future__ import annotations
 
+import importlib
 import secrets
 import streamlit as st
 
@@ -15,13 +16,18 @@ from dianzhentong.learning import (
 )
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
-from dianzhentong.storage import (
-    ResilientPracticeRepository,
-    choose_weak_scenario,
-    make_learning_activity,
-)
+import dianzhentong.storage as storage_module
+
+# Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
+if not hasattr(storage_module.ResilientPracticeRepository, "learned_cards"):
+    storage_module = importlib.reload(storage_module)
+
+ResilientPracticeRepository = storage_module.ResilientPracticeRepository
+choose_weak_scenario = storage_module.choose_weak_scenario
+make_learning_activity = storage_module.make_learning_activity
 
 UI_STATE_VERSION = "0.9"
+STORAGE_CACHE_VERSION = "0.9-progress-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -37,7 +43,8 @@ if st.session_state.get("ui_state_version") != UI_STATE_VERSION:
 config = load_config()
 
 @st.cache_resource
-def create_repository(path: str) -> ResilientPracticeRepository:
+def create_repository(path: str, cache_version: str) -> ResilientPracticeRepository:
+    del cache_version  # 只用于使旧缓存键失效。
     return ResilientPracticeRepository(path)
 
 catalog = KnowledgeBase.catalog()
@@ -48,7 +55,7 @@ if selected_experiment_id not in catalog:
     st.session_state.pop("diagnostic_state", None)
     st.session_state.selected_experiment_id = selected_experiment_id
 knowledge = KnowledgeBase(selected_experiment_id)
-repository = create_repository(str(config.storage_path))
+repository = create_repository(str(config.storage_path), STORAGE_CACHE_VERSION)
 scenario_ids = list(knowledge.scenario_ids)
 
 def get_session() -> DiagnosticSession:

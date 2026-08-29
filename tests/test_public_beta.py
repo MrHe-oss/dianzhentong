@@ -150,3 +150,10 @@ def test_daily_tasks_mastery_and_progress_center_are_present():
     assert "实验掌握进度" in source
     assert "新手学习路线" in source
     assert "标记为已学习" in source
+
+
+def test_storage_hot_upgrade_invalidates_old_cloud_cache():
+    source = Path("app.py").read_text(encoding="utf-8")
+    assert "importlib.reload(storage_module)" in source
+    assert "STORAGE_CACHE_VERSION" in source
+    assert "create_repository(str(config.storage_path), STORAGE_CACHE_VERSION)" in source
