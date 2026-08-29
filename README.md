@@ -51,12 +51,12 @@ python -m pytest -q
 
    ```toml
    DIANZHENTONG_ENV = "community_cloud"
-   DIANZHENTONG_ISSUES_URL = "https://github.com/你的用户名/dianzhentong/issues/new/choose"
+   DIANZHENTONG_ISSUES_URL = "https://github.com/MrHe-oss/dianzhentong/issues/new/choose"
    ```
 
 5. 部署后检查首页、两个实验、报告下载和学习中心，并确认页面显示“临时数据模式”。
 
-仓库用户名和最终公开URL必须在真实创建后填写，项目不会猜测或内置占位账户。
+当前公开仓库为 [MrHe-oss/dianzhentong](https://github.com/MrHe-oss/dianzhentong)。最终应用URL将在 Streamlit Community Cloud 实际创建后补充。
 
 ## 项目结构
 
