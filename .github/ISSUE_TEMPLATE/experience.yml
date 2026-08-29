@@ -1,0 +1,27 @@
+name: 体验建议
+description: 提出界面、学习流程或功能建议
+title: "[建议] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿提交个人身份信息或真实设备资料。"
+  - type: dropdown
+    id: area
+    attributes:
+      label: 建议范围
+      options:
+        - 实验选择
+        - 故障排查
+        - 报告与复盘
+        - 学习统计
+        - 公开部署体验
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议内容
+    validations:
+      required: true
+

@@ -1,0 +1,28 @@
+name: 专业内容纠错
+description: 报告可能不准确或不安全的电气教学内容
+title: "[内容纠错] "
+labels: ["content", "safety-review"]
+body:
+  - type: markdown
+    attributes:
+      value: "不要上传真实现场资料，也不要建议带电测量、短接、拆线或强制动作。"
+  - type: input
+    id: experiment
+    attributes:
+      label: 实验与检查步骤
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: 可能存在的问题
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 参考依据
+      description: 请提供教材、厂家公开资料或标准的名称与版本，不要粘贴受版权保护的长篇内容。
+    validations:
+      required: true
+

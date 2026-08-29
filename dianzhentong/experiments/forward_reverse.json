@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "experiment": {
+    "id": "motor_forward_reverse",
+    "name": "三相异步电动机正反转控制",
+    "symptom": "正转、反转或两个方向不能启动",
+    "default_symptom_id": "both_no_start",
+    "symptoms": [
+      {"id": "both_no_start", "name": "正转和反转两个方向均不能启动"},
+      {"id": "forward_no_start", "name": "正转不能启动，反转功能正常"},
+      {"id": "reverse_no_start", "name": "反转不能启动，正转功能正常"}
+    ],
+    "scope": "接触器电气互锁的正反转控制教学模拟",
+    "entry_node": "fr_fuse"
+  },
+  "safety_notice": "仅用于教学模拟。所有检查均使用网页中的状态卡；不操作真实带电设备，不指导带电测量、拆线、送电或强制接触器动作。",
+  "answers": ["正常", "异常", "不确定"],
+  "nodes": [
+    {
+      "id": "fr_fuse", "order": 1, "object": "正反转控制回路熔断器（模拟）",
+      "question": "模拟的控制回路熔断器状态是否正常？",
+      "expected": "模拟通断卡显示熔断器导通。",
+      "offline_check": "只读取网页状态卡，不检查或更换真实熔断器。",
+      "term_help": "控制回路熔断器断路时，正转与反转接触器线圈都无法形成工作条件。",
+      "scenario_observations": {"正常": "模拟通断卡：控制回路熔断器导通。", "异常": "模拟通断卡：控制回路熔断器不导通。"},
+      "safety": "真实熔断器必须由合格人员在电源可靠隔离后处理。",
+      "applies_to": ["both_no_start", "forward_no_start", "reverse_no_start"],
+      "transitions": {"正常": "fr_thermal", "异常": "fr_cause_fuse", "不确定": "fr_fuse"}
+    },
+    {
+      "id": "fr_thermal", "order": 2, "object": "正反转热继电器保护触点（模拟）",
+      "question": "热继电器是否处于已复位、常闭保护触点闭合的模拟状态？",
+      "expected": "模拟状态显示热继电器已复位，常闭保护触点闭合。",
+      "offline_check": "只读取网页状态卡，不操作真实复位机构。",
+      "term_help": "热继电器保护触点通常位于两个方向共用的控制路径中。",
+      "scenario_observations": {"正常": "模拟状态卡：热继电器已复位，保护触点闭合。", "异常": "模拟状态卡：热继电器动作，保护触点断开。"},
+      "safety": "真实保护动作必须先查明原因，本工具不指导现场复位。",
+      "applies_to": ["both_no_start", "forward_no_start", "reverse_no_start"],
+      "transitions": {"正常": "fr_stop", "异常": "fr_cause_thermal", "不确定": "fr_thermal"}
+    },
+    {
+      "id": "fr_stop", "order": 3, "object": "正反转停止按钮常闭触点（模拟）",
+      "question": "停止按钮未按下时，模拟常闭触点状态是否正常？",
+      "expected": "模拟通断卡显示停止按钮常闭触点导通。",
+      "offline_check": "只读取模拟通断卡，不拆卸真实按钮。",
+      "term_help": "停止按钮常闭触点通常是正反转两个方向共用的控制条件。",
+      "scenario_observations": {"正常": "模拟通断卡：停止按钮常闭触点导通。", "异常": "模拟通断卡：停止按钮未按下，但常闭触点不导通。"},
+      "safety": "不得根据本工具拆改真实按钮或控制线路。",
+      "applies_to": ["both_no_start", "forward_no_start", "reverse_no_start"],
+      "transitions": {"正常": "fr_forward_button", "异常": "fr_cause_stop", "不确定": "fr_stop"}
+    },
+    {
+      "id": "fr_forward_button", "order": 4, "object": "正转启动按钮常开触点（模拟）",
+      "question": "按下正转启动按钮时，模拟常开触点是否正常闭合？",
+      "expected": "模拟通断卡显示正转按钮按下后触点闭合。",
+      "offline_check": "只操作网页中的仿真按钮。",
+      "term_help": "正转启动按钮为正转接触器控制支路提供启动信号。",
+      "scenario_observations": {"正常": "模拟通断卡：正转按钮按下后触点闭合。", "异常": "模拟通断卡：正转按钮按下后触点仍不导通。"},
+      "safety": "本步骤不授权操作真实控制箱。",
+      "applies_to": ["forward_no_start"],
+      "transitions": {"正常": "fr_reverse_button", "异常": "fr_cause_forward_button", "不确定": "fr_forward_button"}
+    },
+    {
+      "id": "fr_reverse_button", "order": 5, "object": "反转启动按钮常开触点（模拟）",
+      "question": "按下反转启动按钮时，模拟常开触点是否正常闭合？",
+      "expected": "模拟通断卡显示反转按钮按下后触点闭合。",
+      "offline_check": "只操作网页中的仿真按钮。",
+      "term_help": "反转启动按钮为反转接触器控制支路提供启动信号。",
+      "scenario_observations": {"正常": "模拟通断卡：反转按钮按下后触点闭合。", "异常": "模拟通断卡：反转按钮按下后触点仍不导通。"},
+      "safety": "本步骤不授权操作真实控制箱。",
+      "applies_to": ["reverse_no_start"],
+      "transitions": {"正常": "fr_forward_coil", "异常": "fr_cause_reverse_button", "不确定": "fr_reverse_button"}
+    },
+    {
+      "id": "fr_forward_coil", "order": 6, "object": "正转接触器线圈连续性（模拟）",
+      "question": "正转接触器线圈的模拟连续性结果是否正常？",
+      "expected": "模拟连续性卡显示正转线圈连续且型号与题设一致。",
+      "offline_check": "只读取模拟连续性卡，不测量真实线圈。",
+      "term_help": "正转接触器线圈驱动正转主触点与辅助触点动作。",
+      "scenario_observations": {"正常": "模拟连续性卡：正转接触器线圈连续。", "异常": "模拟连续性卡：正转接触器线圈不连续。"},
+      "safety": "接触器检查必须由合格人员在可靠隔离后进行。",
+      "applies_to": ["forward_no_start"],
+      "transitions": {"正常": "fr_reverse_coil", "异常": "fr_cause_forward_coil", "不确定": "fr_forward_coil"}
+    },
+    {
+      "id": "fr_reverse_coil", "order": 7, "object": "反转接触器线圈连续性（模拟）",
+      "question": "反转接触器线圈的模拟连续性结果是否正常？",
+      "expected": "模拟连续性卡显示反转线圈连续且型号与题设一致。",
+      "offline_check": "只读取模拟连续性卡，不测量真实线圈。",
+      "term_help": "反转接触器线圈驱动反转主触点与辅助触点动作。",
+      "scenario_observations": {"正常": "模拟连续性卡：反转接触器线圈连续。", "异常": "模拟连续性卡：反转接触器线圈不连续。"},
+      "safety": "接触器检查必须由合格人员在可靠隔离后进行。",
+      "applies_to": ["reverse_no_start"],
+      "transitions": {"正常": "fr_interlock", "异常": "fr_cause_reverse_coil", "不确定": "fr_reverse_coil"}
+    },
+    {
+      "id": "fr_interlock", "order": 8, "object": "反转接触器电气互锁常闭触点（模拟）",
+      "question": "正转支路中的反转接触器常闭互锁触点是否正常导通？",
+      "expected": "反转接触器未动作时，模拟常闭互锁触点导通。",
+      "offline_check": "只读取网页模拟触点状态，不短接或拆改真实互锁线路。",
+      "term_help": "电气互锁使用另一方向接触器的常闭辅助触点，防止两个接触器同时吸合。",
+      "scenario_observations": {"正常": "模拟通断卡：反转接触器未动作时，其互锁常闭触点导通。", "异常": "模拟通断卡：反转接触器未动作，但其互锁常闭触点不导通。"},
+      "safety": "严禁短接真实互锁触点或强制两个接触器同时动作。",
+      "applies_to": ["forward_no_start"],
+      "transitions": {"正常": "fr_inconsistent", "异常": "fr_cause_interlock", "不确定": "fr_interlock"}
+    }
+  ],
+  "results": [
+    {"id": "fr_cause_fuse", "symptom_id": "both_no_start", "cause": "模拟正反转控制熔断器断路", "explanation": "两个方向共用的控制回路在熔断器处中断。", "evidence": "模拟熔断器状态异常。", "source": "电气控制基础教材中的正反转控制通用原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_thermal", "symptom_id": "both_no_start", "cause": "模拟热继电器未复位", "explanation": "共用保护触点断开，使两个方向均不能形成控制路径。", "evidence": "热继电器保护触点状态异常。", "source": "低压电器与电气控制基础教材中的热继电器原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_stop", "symptom_id": "both_no_start", "cause": "模拟停止按钮常闭触点异常", "explanation": "两个方向共用的停止按钮常闭触点不导通。", "evidence": "停止按钮模拟通断状态异常。", "source": "电气控制基础教材中的按钮控制原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_forward_button", "symptom_id": "forward_no_start", "cause": "模拟正转启动按钮异常", "explanation": "正转按钮按下后未形成预期闭合状态。", "evidence": "正转启动按钮模拟状态异常。", "source": "电气控制基础教材中的正反转按钮控制原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_reverse_button", "symptom_id": "reverse_no_start", "cause": "模拟反转启动按钮异常", "explanation": "反转按钮按下后未形成预期闭合状态。", "evidence": "反转启动按钮模拟状态异常。", "source": "电气控制基础教材中的正反转按钮控制原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_forward_coil", "symptom_id": "forward_no_start", "cause": "模拟正转接触器线圈异常", "explanation": "正转支路前序条件正常，但正转线圈连续性异常。", "evidence": "正转接触器线圈模拟连续性异常。", "source": "低压电器与电气控制基础教材中的接触器原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_reverse_coil", "symptom_id": "reverse_no_start", "cause": "模拟反转接触器线圈异常", "explanation": "反转支路前序条件正常，但反转线圈连续性异常。", "evidence": "反转接触器线圈模拟连续性异常。", "source": "低压电器与电气控制基础教材中的接触器原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_cause_interlock", "symptom_id": "forward_no_start", "cause": "模拟电气互锁常闭触点异常", "explanation": "正转支路中的反转接触器常闭互锁触点未导通。", "evidence": "反转接触器未动作时，模拟互锁常闭触点状态异常。", "source": "电气控制基础教材中的接触器电气互锁原理", "confidence": "教学规则已录入，待专业人员复核"},
+    {"id": "fr_inconsistent", "cause": "现有信息不足或与限定故障范围不一致", "explanation": "适用于当前现象的模拟检查均正常，不能在缺少证据时给出确定结论。", "evidence": "当前现象对应的限定检查范围内未发现异常。", "source": "本原型的保守诊断规则", "confidence": "不确定；需要重新检查模拟输入"}
+  ],
+  "reflection_questions": [
+    "为什么公共控制回路异常会同时影响正转和反转？",
+    "电气互锁常闭触点在另一方向接触器动作时应发生什么变化？",
+    "为什么不能通过短接互锁触点来验证故障？"
+  ]
+}

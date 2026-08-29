@@ -1,0 +1,29 @@
+name: 软件故障报告
+description: 报告页面、流程、保存或部署问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿上传真实设备、单位、人员或生产数据。本项目不能用于真实设备诊断。"
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      placeholder: v0.5
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 只描述网页中的模拟操作。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+

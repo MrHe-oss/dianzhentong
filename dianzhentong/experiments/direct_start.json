@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "experiment": {
+    "id": "motor_dol_no_start",
+    "name": "三相异步电动机直接启动",
+    "symptom": "按下启动按钮后电动机不启动",
+    "default_symptom_id": "no_start",
+    "symptoms": [
+      {"id": "no_start", "name": "按下启动按钮后电动机不启动"}
+    ],
+    "scope": "纯模拟、断电状态下的教学排查",
+    "entry_node": "control_power"
+  },
+  "safety_notice": "仅用于教学模拟。所有检查均假设装置已与电源可靠隔离并完成验电；不操作真实带电设备。本工具不指导带电测量、拆线或送电操作。",
+  "answers": ["正常", "异常", "不确定"],
+  "nodes": [
+    {
+      "id": "control_power",
+      "order": 1,
+      "object": "控制电源状态（模拟）",
+      "question": "根据给定的模拟资料，控制电源状态是否正常？",
+      "expected": "模拟资料显示控制回路具备规定的电源条件。",
+      "offline_check": "只阅读题目给出的状态卡或仿真面板，不进行任何真实电压测量。",
+      "term_help": "控制电源为接触器线圈和按钮控制回路提供工作条件。",
+      "scenario_observations": {"正常": "模拟状态卡：控制回路电源条件可用。", "异常": "模拟状态卡：控制回路电源条件不可用。"},
+      "safety": "禁止在真实装置上带电测量。本步骤只允许读取模拟信息。",
+      "transitions": {"正常": "fuse", "异常": "cause_control_power", "不确定": "control_power"}
+    },
+    {
+      "id": "fuse",
+      "order": 2,
+      "object": "控制回路熔断器（模拟）",
+      "question": "模拟的熔断器通断状态是否正常？",
+      "expected": "断电模拟检查显示熔断器导通。",
+      "offline_check": "读取仿真给出的通断结果，不拆卸或检测真实熔断器。",
+      "term_help": "熔断器在过电流时断开，用于保护控制回路。",
+      "scenario_observations": {"正常": "模拟通断卡：熔断器两端导通。", "异常": "模拟通断卡：熔断器两端不导通。"},
+      "safety": "真实熔断器必须由合格人员在隔离电源后检查和更换。",
+      "transitions": {"正常": "thermal_relay", "异常": "cause_fuse", "不确定": "fuse"}
+    },
+    {
+      "id": "thermal_relay",
+      "order": 3,
+      "object": "热继电器常闭保护触点（模拟）",
+      "question": "热继电器是否处于已复位、保护触点闭合的模拟状态？",
+      "expected": "模拟状态显示热继电器已复位，常闭保护触点闭合。",
+      "offline_check": "查看仿真状态标识，不操作真实复位机构。",
+      "term_help": "热继电器动作后，其常闭保护触点通常会断开控制回路。",
+      "scenario_observations": {"正常": "模拟状态卡：热继电器已复位，常闭保护触点闭合。", "异常": "模拟状态卡：热继电器动作标志存在，常闭保护触点断开。"},
+      "safety": "复位前必须查明保护动作原因；教学原型不指导真实复位。",
+      "transitions": {"正常": "stop_button", "异常": "cause_thermal", "不确定": "thermal_relay"}
+    },
+    {
+      "id": "stop_button",
+      "order": 4,
+      "object": "停止按钮常闭触点（模拟）",
+      "question": "停止按钮常闭触点的模拟通断状态是否正常？",
+      "expected": "按钮未按下时，模拟状态显示常闭触点导通。",
+      "offline_check": "读取模拟通断卡，不拆卸或检测真实按钮。",
+      "term_help": "常闭触点在按钮未动作时保持闭合，按下后断开。",
+      "scenario_observations": {"正常": "模拟通断卡：停止按钮未按下时，常闭触点导通。", "异常": "模拟通断卡：停止按钮未按下，但常闭触点不导通。"},
+      "safety": "不得依据本工具拆改真实按钮或控制线路。",
+      "transitions": {"正常": "start_button", "异常": "cause_stop", "不确定": "stop_button"}
+    },
+    {
+      "id": "start_button",
+      "order": 5,
+      "object": "启动按钮常开触点（模拟）",
+      "question": "按下启动按钮时，其常开触点的模拟状态是否正常闭合？",
+      "expected": "模拟状态显示按钮按下后常开触点闭合。",
+      "offline_check": "只使用仿真按钮和模拟状态，不操作真实控制箱。",
+      "term_help": "常开触点在按钮未动作时断开，按下后闭合。",
+      "scenario_observations": {"正常": "模拟通断卡：按下启动按钮后，常开触点闭合。", "异常": "模拟通断卡：按下启动按钮后，常开触点仍不导通。"},
+      "safety": "本步骤不授权对真实设备送电或拆线。",
+      "transitions": {"正常": "contactor_coil", "异常": "cause_start", "不确定": "start_button"}
+    },
+    {
+      "id": "contactor_coil",
+      "order": 6,
+      "object": "接触器线圈连续性（模拟）",
+      "question": "接触器线圈的模拟连续性结果是否正常？",
+      "expected": "断电模拟检查显示线圈连续，且型号与题设一致。",
+      "offline_check": "读取题目给出的模拟结果，不测量或拆卸真实接触器。",
+      "term_help": "接触器线圈获得正确控制条件后产生磁力，驱动触点动作。",
+      "scenario_observations": {"正常": "模拟连续性卡：接触器线圈连续，型号与题设一致。", "异常": "模拟连续性卡：接触器线圈不连续。"},
+      "safety": "接触器检查涉及专业操作，本原型不提供真实操作步骤。",
+      "transitions": {"正常": "inconsistent", "异常": "cause_coil", "不确定": "contactor_coil"}
+    }
+  ],
+  "results": [
+    {
+      "id": "cause_control_power",
+      "cause": "模拟控制电源缺失",
+      "explanation": "第一项模拟条件已异常，后续控制元件无法按预期工作。",
+      "evidence": "控制电源状态被记录为异常。",
+      "source": "电气控制基础教材中的直接启动控制回路通用原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "cause_fuse",
+      "cause": "模拟熔断器断路",
+      "explanation": "控制电源条件正常，但模拟熔断器不导通，控制回路在该处中断。",
+      "evidence": "控制电源正常，熔断器状态异常。",
+      "source": "低压电器与电气控制基础教材中的熔断器原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "cause_thermal",
+      "cause": "模拟热继电器未复位",
+      "explanation": "前序条件正常，但热继电器保护触点处于断开状态。",
+      "evidence": "热继电器复位或保护触点状态被记录为异常。",
+      "source": "低压电器与电气控制基础教材中的热继电器原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "cause_stop",
+      "cause": "模拟停止按钮常闭触点断路",
+      "explanation": "停止按钮的常闭触点未形成连续的模拟控制路径。",
+      "evidence": "停止按钮常闭触点状态被记录为异常。",
+      "source": "电气控制基础教材中的按钮与控制回路原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "cause_start",
+      "cause": "模拟启动按钮接触不良",
+      "explanation": "按下按钮后，模拟常开触点未能形成预期的闭合状态。",
+      "evidence": "启动按钮动作后的触点状态被记录为异常。",
+      "source": "电气控制基础教材中的按钮与控制回路原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "cause_coil",
+      "cause": "模拟接触器线圈断路",
+      "explanation": "所有前序模拟条件正常，但线圈连续性异常。",
+      "evidence": "接触器线圈的模拟连续性结果被记录为异常。",
+      "source": "低压电器与电气控制基础教材中的接触器原理",
+      "confidence": "教学规则已录入，待专业人员复核"
+    },
+    {
+      "id": "inconsistent",
+      "cause": "现有信息不足或与限定故障范围不一致",
+      "explanation": "六项模拟条件均被记录为正常，但题设现象仍存在。不能在缺少证据时给出确定结论。",
+      "evidence": "当前限定范围内未发现异常项。",
+      "source": "本原型的保守诊断规则",
+      "confidence": "不确定；需要重新检查模拟输入"
+    }
+  ],
+  "reflection_questions": [
+    "哪一项检查最直接支持当前结论？",
+    "如果某项结果为“不确定”，应如何在安全条件下获得更可靠的信息？",
+    "为什么不能仅凭电动机不启动这一现象直接更换元件？"
+  ]
+}
