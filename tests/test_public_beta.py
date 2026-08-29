@@ -128,3 +128,13 @@ def test_four_step_ui_and_mobile_theme_are_present():
     assert "stage / 4" in source
     assert "UI_STATE_VERSION" in source
     assert "@media(max-width:640px)" in source
+
+
+def test_guided_learning_and_knowledge_center_are_present():
+    source = Path("app.py").read_text(encoding="utf-8")
+    assert "引导学习模式" in source
+    assert "知识中心" in source
+    assert 'set_stage(6)' in source
+    assert 'current_mode in {"随机故障练习", "引导学习模式"}' in source
+    assert "if scored_practice:" in source
+    assert "repository.save(session.to_practice_record())" in source

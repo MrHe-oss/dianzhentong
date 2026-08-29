@@ -73,3 +73,12 @@ def test_correct_practice_report_says_no_wrong_judgment():
 def test_free_report_does_not_invent_recommended_path():
     report = build_report(completed_session())
     assert "推荐排查顺序" not in report
+
+
+def test_report_can_hide_scores_for_guided_learning():
+    session = DiagnosticSession(KnowledgeBase())
+    session.start(True, scenario_id="cause_control_power")
+    session.answer("异常")
+    report = build_report(session, include_score=False)
+    assert "推荐排查顺序" in report
+    assert "练习得分" not in report

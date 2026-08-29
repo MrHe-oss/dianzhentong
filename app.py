@@ -6,14 +6,21 @@ import streamlit as st
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
+from dianzhentong.learning import (
+    REVIEW_STATUS,
+    card_for_node,
+    cards_for_experiment,
+    relationship_steps,
+    review_cards,
+)
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.storage import ResilientPracticeRepository, choose_weak_scenario
 
-UI_STATE_VERSION = "0.7"
+UI_STATE_VERSION = "0.8"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
-.block-container{max-width:920px;padding-top:2rem;padding-bottom:4rem}.dzt-hero{padding:1.5rem 1.6rem;border-radius:20px;color:white;background:linear-gradient(135deg,#1d4ed8,#3b82f6);margin-bottom:1.2rem}.dzt-hero h1{margin:0;font-size:2.25rem}.dzt-hero p{margin:.45rem 0 0;opacity:.9}.dzt-card{min-height:168px;padding:1.1rem 1.2rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;margin-bottom:.75rem}.dzt-card h3{color:#172033;margin:0 0 .5rem;font-size:1.08rem}.dzt-card p{margin:.25rem 0;color:#475569}.dzt-step{padding:.8rem 1rem;border-left:4px solid #2563eb;border-radius:0 12px 12px 0;background:#eff6ff;margin:.5rem 0}div.stButton>button,div.stDownloadButton>button{border-radius:10px;min-height:2.8rem}[data-testid="stMetric"]{background:#f8fafc;border:1px solid #e2e8f0;padding:.8rem;border-radius:12px}
+.block-container{max-width:920px;padding-top:2rem;padding-bottom:4rem}.dzt-hero{padding:1.5rem 1.6rem;border-radius:20px;color:white;background:linear-gradient(135deg,#1d4ed8,#3b82f6);margin-bottom:1.2rem}.dzt-hero h1{margin:0;font-size:2.25rem}.dzt-hero p{margin:.45rem 0 0;opacity:.9}.dzt-card{min-height:168px;padding:1.1rem 1.2rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;margin-bottom:.75rem}.dzt-card h3{color:#172033;margin:0 0 .5rem;font-size:1.08rem}.dzt-card p{margin:.25rem 0;color:#475569}.dzt-step{padding:.8rem 1rem;border-left:4px solid #2563eb;border-radius:0 12px 12px 0;background:#eff6ff;margin:.5rem 0}.dzt-flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.8rem 0 1rem}.dzt-flow span{padding:.55rem .7rem;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.dzt-flow b{color:#60a5fa}div.stButton>button,div.stDownloadButton>button{border-radius:10px;min-height:2.8rem}[data-testid="stMetric"]{background:#f8fafc;border:1px solid #e2e8f0;padding:.8rem;border-radius:12px}
 @media(max-width:640px){.block-container{padding:1rem .85rem 3rem}.dzt-hero{padding:1.1rem;border-radius:15px}.dzt-hero h1{font-size:1.75rem}.dzt-card{min-height:0}[data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:.6rem}[data-testid="stHorizontalBlock"]>div{min-width:100%}}
 </style>""", unsafe_allow_html=True)
 
@@ -54,6 +61,11 @@ def reset_all() -> None:
 def set_stage(stage: int) -> None:
     st.session_state.stage = stage
 
+def open_knowledge(card_id: str | None = None) -> None:
+    if card_id:
+        st.session_state.selected_knowledge_card = card_id
+    set_stage(6)
+
 def start_practice(scenario_id: str) -> None:
     new_session = DiagnosticSession(knowledge)
     new_session.start(True, scenario_id=scenario_id)
@@ -82,7 +94,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5}:
+if stage not in {1, 2, 3, 4, 5, 6}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -102,6 +114,8 @@ with st.sidebar:
         st.link_button("🛠️ 程序故障或专业纠错", config.issues_url, use_container_width=True)
     if st.button("📊 学习中心", use_container_width=True):
         set_stage(5); st.rerun()
+    if st.button("📘 知识中心", use_container_width=True):
+        open_knowledge(); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
         with st.expander("查看检查记录"):
@@ -122,14 +136,18 @@ if stage == 1:
         with column:
             st.markdown(f'<div class="dzt-card"><h3>{experiment["name"]}</h3><p><b>{len(experiment_knowledge.scenario_ids)} 类</b>模拟故障</p><p>{experiment["scope"]}</p><p><small>现象：{symptoms}</small></p></div>', unsafe_allow_html=True)
     chosen_experiment_id = st.radio("实验", experiment_options, index=experiment_options.index(knowledge.experiment_id), format_func=lambda item: catalog[item]["name"], horizontal=True, label_visibility="collapsed")
-    mode = st.segmented_control("练习方式", ["随机故障练习", "自由诊断演示"], default=st.session_state.get("practice_mode", "随机故障练习"), help="随机练习会隐藏一种故障并自动评分；自由诊断用于探索固定规则。") or "随机故障练习"
+    mode_options = ["随机故障练习", "引导学习模式", "自由诊断演示"]
+    saved_mode = st.session_state.get("practice_mode", "随机故障练习")
+    mode = st.segmented_control("学习方式", mode_options, default=saved_mode if saved_mode in mode_options else mode_options[0], help="随机练习自动评分；引导模式先讲解再判断且不计分；自由诊断用于探索规则。") or "随机故障练习"
     chosen_knowledge = KnowledgeBase(chosen_experiment_id)
     selected_symptom_id = chosen_knowledge.default_symptom_id
     if mode == "自由诊断演示":
         symptom_ids = list(chosen_knowledge.symptoms)
         selected_symptom_id = st.radio("选择模拟故障现象", symptom_ids, format_func=lambda item: chosen_knowledge.symptoms[item])
-    else:
+    elif mode == "随机故障练习":
         st.info("系统会随机生成故障和对应现象；完成后显示评分与推荐排查顺序。")
+    else:
+        st.info("每一步会先解释元件作用，再提供模拟资料供你判断；本模式不计分、不写入学习统计。")
     with st.expander("使用范围与隐私说明"):
         st.write("应用只读取网页内的模拟资料，不连接设备，也不提供真实带电操作指导。")
         st.write("应用不要求姓名、邮箱或账号；练习记录只包含实验、结果、得分和时间。")
@@ -154,7 +172,8 @@ elif stage == 2:
         set_stage(1); st.rerun()
     if st.button("确认并开始排查", type="primary", disabled=not (safe_simulation and safe_no_power and safe_education), use_container_width=True):
         try:
-            scenario_id = secrets.choice(scenario_ids) if st.session_state.get("practice_mode", "随机故障练习") == "随机故障练习" else None
+            current_mode = st.session_state.get("practice_mode", "随机故障练习")
+            scenario_id = secrets.choice(scenario_ids) if current_mode in {"随机故障练习", "引导学习模式"} else None
             session.start(True, scenario_id=scenario_id, symptom_id=st.session_state.get("selected_symptom_id", knowledge.default_symptom_id))
             save_session(session); set_stage(3); st.rerun()
         except SessionError as exc:
@@ -173,6 +192,10 @@ elif stage == 3:
         assert node is not None
         st.error(f"当前故障现象：{session.symptom}")
         st.markdown(f"<div class='dzt-step'><b>检查 {node['order']} / {len(knowledge.nodes)}</b><br>{node['object']}</div>", unsafe_allow_html=True)
+        if st.session_state.get("practice_mode") == "引导学习模式":
+            guided_card = card_for_node(node["id"])
+            if guided_card:
+                st.info(f"**先理解：{guided_card['title']}**\n\n{guided_card['principle']}\n\n**在本回路中的作用：** {guided_card['role']}")
         st.markdown(f"### {node['question']}")
         if session.scenario_observation:
             st.info(f"**本题模拟资料**\n\n{session.scenario_observation}")
@@ -200,7 +223,8 @@ elif stage == 4:
             set_stage(3); st.rerun()
     else:
         result = session.result
-        if session.scenario_id is not None:
+        scored_practice = session.scenario_id is not None and st.session_state.get("practice_mode") == "随机故障练习"
+        if scored_practice:
             repository.save(session.to_practice_record())
         st.markdown("### 1. 本次结论")
         st.write(f"**实验：** {knowledge.experiment['name']}")
@@ -211,7 +235,7 @@ elif stage == 4:
             st.write(f"**证据：** {result['evidence']}")
             st.write(f"**依据来源：** {result['source']}")
             st.write(f"**可信度：** {result['confidence']}")
-        if session.scenario_result is not None:
+        if scored_practice:
             correct, total = session.score
             matched = session.result_id == session.scenario_id
             st.markdown("### 2. 得分与错因")
@@ -230,20 +254,31 @@ elif stage == 4:
                 st.success("判断过程正确，无错误判断。")
             if session.uncertain_count:
                 st.caption(f"本次共有 {session.uncertain_count} 次“不确定”回答，不计入有效判断得分。")
+            suggested_cards = review_cards(entry["node_id"] for entry in wrong_entries)
+            for review_card in suggested_cards:
+                if st.button(f"复习：{review_card['title']}", key=f"report_review_{review_card['id']}", use_container_width=True):
+                    open_knowledge(review_card["id"]); st.rerun()
             st.markdown("### 3. 推荐排查顺序")
             path = session.recommended_path()
             assert path is not None
             for index, step in enumerate(path["steps"], 1):
                 st.markdown(f"<div class='dzt-step'><b>{index}. {step['object']} → {step['answer']}</b><br><small>{step['observation']}</small></div>", unsafe_allow_html=True)
             st.success(f"推荐路径最终结论：{path['cause']}")
+        elif session.scenario_result is not None:
+            st.markdown("### 2. 引导学习小结")
+            st.info("本模式不计分，也不会写入学习统计。下面展示本次场景的推荐排查顺序。")
+            path = session.recommended_path()
+            assert path is not None
+            for index, step in enumerate(path["steps"], 1):
+                st.markdown(f"<div class='dzt-step'><b>{index}. {step['object']} → {step['answer']}</b><br><small>{step['observation']}</small></div>", unsafe_allow_html=True)
         st.markdown("### 4. 完整检查记录")
         with st.expander("展开本次操作顺序"):
             for index, item in enumerate(session.history, 1):
                 grade = " ✅" if item.get("is_correct") is True else (f" ❌（正确判断：{item['expected_answer']}）" if item.get("is_correct") is False else "")
                 st.write(f"{index}. {item['object']} → **{item['answer']}**{grade}")
-        report = build_report(session)
+        report = build_report(session, include_score=scored_practice)
         st.download_button("下载文本学习报告", data=report.encode("utf-8"), file_name="电诊通_教学诊断报告.txt", mime="text/plain", use_container_width=True)
-        if session.scenario_result is not None:
+        if scored_practice:
             if st.button("练习薄弱项", type="primary", use_container_width=True):
                 start_weak_practice(); st.rerun()
             if st.button("再来一题", use_container_width=True):
@@ -262,6 +297,15 @@ elif stage == 5:
     summary = repository.summary(experiment_id=knowledge.experiment_id)
     stats = repository.fault_stats(scenario_ids, experiment_id=knowledge.experiment_id)
     recent = repository.recent(10, experiment_id=knowledge.experiment_id)
+    recommended_cards = review_cards(
+        node_id for item in recent for node_id in item.get("wrong_nodes", [])
+    )
+    if recommended_cards:
+        st.subheader("建议复习")
+        st.caption("根据最近错题生成，只使用本机或当前云端临时记录。")
+        for review_card in recommended_cards:
+            if st.button(f"复习：{review_card['title']}", key=f"center_review_{review_card['id']}", use_container_width=True):
+                open_knowledge(review_card["id"]); st.rerun()
     if not summary["attempts"]:
         st.info("还没有练习记录。完成一次随机故障练习后，这里会显示学习统计。")
         if st.button("开始第一题", type="primary", use_container_width=True):
@@ -287,3 +331,37 @@ elif stage == 5:
                 repository.clear(confirmed=True); st.success("学习记录已清空。"); st.rerun()
     if st.button("返回实验首页", use_container_width=True):
         set_stage(1); st.rerun()
+
+elif stage == 6:
+    st.subheader("📘 知识中心")
+    st.write(f"**当前实验：{knowledge.experiment['name']}**")
+    st.caption("以下内容解释控制逻辑与模拟判断，不构成真实设备接线、测量或维修指导。")
+    flow = relationship_steps(knowledge.experiment_id)
+    flow_html = "<b>→</b>".join(f"<span>{item}</span>" for item in flow)
+    st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
+    st.warning("教学关系示意：不含端子号、真实电压、接线位置或带电操作步骤。")
+
+    available_cards = cards_for_experiment(knowledge.experiment_id)
+    card_ids = [item["id"] for item in available_cards]
+    selected_card_id = st.session_state.get("selected_knowledge_card")
+    if selected_card_id not in card_ids:
+        selected_card_id = card_ids[0]
+    selected_card_id = st.selectbox(
+        "选择知识卡",
+        card_ids,
+        index=card_ids.index(selected_card_id),
+        format_func=lambda item: next(card["title"] for card in available_cards if card["id"] == item),
+    )
+    st.session_state.selected_knowledge_card = selected_card_id
+    card = next(item for item in available_cards if item["id"] == selected_card_id)
+    st.markdown(f"### {card['title']}")
+    st.info(card["principle"])
+    st.write(f"**在控制逻辑中的作用：** {card['role']}")
+    st.success(f"**正常模拟状态：** {card['normal']}")
+    st.warning(f"**异常模拟状态：** {card['abnormal']}")
+    st.write(f"**复习要点：** {card['review']}")
+    st.caption(REVIEW_STATUS)
+    if st.button("练习当前实验", type="primary", use_container_width=True):
+        st.session_state.pop("diagnostic_state", None); set_stage(1); st.rerun()
+    if st.button("返回学习中心", use_container_width=True):
+        set_stage(5); st.rerun()

@@ -13,7 +13,11 @@ DISCLAIMER = (
 )
 
 
-def build_report(session: DiagnosticSession, generated_at: datetime | None = None) -> str:
+def build_report(
+    session: DiagnosticSession,
+    generated_at: datetime | None = None,
+    include_score: bool = True,
+) -> str:
     if not session.is_complete or session.result is None:
         raise ValueError("诊断完成后才能生成报告")
     moment = generated_at or datetime.now()
@@ -35,7 +39,7 @@ def build_report(session: DiagnosticSession, generated_at: datetime | None = Non
         f"依据来源：{result['source']}",
         f"可信度：{result['confidence']}",
     ]
-    if session.scenario_result is not None:
+    if session.scenario_result is not None and include_score:
         correct, total = session.score
         matched = session.result_id == session.scenario_id
         lines.extend(
@@ -66,6 +70,7 @@ def build_report(session: DiagnosticSession, generated_at: datetime | None = Non
         else:
             lines.append("- 判断过程正确，无错误判断。")
 
+    if session.scenario_result is not None:
         path = session.recommended_path()
         assert path is not None
         lines.extend(["", "推荐排查顺序", "-" * 28])
