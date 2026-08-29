@@ -17,6 +17,7 @@ from dianzhentong.learning import (
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
+from dianzhentong.provenance import provenance_for_result, resolved_sources
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
@@ -27,7 +28,7 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.1"
+UI_STATE_VERSION = "1.2"
 STORAGE_CACHE_VERSION = "0.9-progress-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -311,6 +312,13 @@ elif stage == 4:
             st.write(f"**证据：** {result['evidence']}")
             st.write(f"**依据来源：** {result['source']}")
             st.write(f"**可信度：** {result['confidence']}")
+            provenance = provenance_for_result(session.result_id)
+            if provenance:
+                st.write(f"**参考原理：** {provenance['principle']}")
+                st.write(f"**审校状态：** {provenance['status']}")
+                st.markdown("**参考资料：**")
+                for source in resolved_sources(provenance):
+                    st.markdown(f"- [{source['title']}]({source['url']})（{source['type']}）")
         if scored_practice:
             correct, total = session.score
             matched = session.result_id == session.scenario_id

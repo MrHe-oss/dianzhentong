@@ -6,6 +6,7 @@ from datetime import datetime
 
 from .engine import DiagnosticSession
 from .insights import insight_for_result
+from .provenance import provenance_for_result, resolved_sources
 
 
 DISCLAIMER = (
@@ -25,6 +26,7 @@ def build_report(
     experiment = session.knowledge.experiment
     result = session.result
     insight = insight_for_result(session.result_id)
+    provenance = provenance_for_result(session.result_id)
     lines = [
         "电诊通｜教学诊断报告",
         "=" * 28,
@@ -52,6 +54,18 @@ def build_report(
                 f"记忆提示：{insight['memory']}",
             ]
         )
+    if provenance:
+        lines.extend(
+            [
+                "",
+                "内容来源与审校状态",
+                "-" * 28,
+                f"参考原理：{provenance['principle']}",
+                f"审校状态：{provenance['status']}",
+            ]
+        )
+        for source in resolved_sources(provenance):
+            lines.append(f"- {source['title']}（{source['type']}）：{source['url']}")
     if session.scenario_result is not None and include_score:
         correct, total = session.score
         matched = session.result_id == session.scenario_id
