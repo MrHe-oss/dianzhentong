@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from .diagram_learning import cases_for_chapter
 
 
 COURSE = {
@@ -193,6 +194,15 @@ def course_unlock_requirement(course_id: str) -> str:
 
 def chapter_learning_steps(repository: Any, chapter: dict[str, Any]) -> tuple[LearningStep, ...]:
     progress = chapter_progress(repository, chapter)
+    diagram_cases = cases_for_chapter(chapter["id"])
+    if diagram_cases:
+        diagram = repository.diagram_summary(chapter["id"])
+        return (
+            LearningStep("学习知识卡", "已完成" if progress.learned_cards == progress.total_cards else "进行中", f"{progress.learned_cards}/{progress.total_cards}"),
+            LearningStep("完成互动识图", "已完成" if diagram["attempts"] else "待完成", f"{diagram['completed_cases']}/{len(diagram_cases)} 个案例"),
+            LearningStep("通过章节测验", "已完成" if progress.quiz_passed else "待完成", f"已测 {progress.quiz_attempts} 次"),
+            LearningStep("完成本章总结", "已完成" if progress.status == "已完成" else "待完成", "复盘路径与错题"),
+        )
     experiment_id = chapter["experiment_id"]
     summary = repository.summary(experiment_id) if experiment_id else {"attempts": 0}
     guided = sum(
@@ -229,6 +239,18 @@ def chapter_progress(repository: Any, chapter: dict[str, Any]) -> ChapterProgres
             item["activity_type"] == "guided_session" for item in repository.activities(experiment_id)
         )
     card_ratio = learned_count / len(card_ids) if card_ids else 1.0
+    diagram_cases = cases_for_chapter(chapter["id"])
+    if diagram_cases:
+        diagram_completed = bool(repository.diagram_summary(chapter["id"])["attempts"])
+        quiz = repository.quiz_summary(chapter["id"])
+        quiz_passed = bool(quiz["passed_count"])
+        completion = 0.4 * card_ratio + 0.3 * diagram_completed + 0.3 * quiz_passed
+        all_complete = card_ratio == 1 and diagram_completed and quiz_passed
+        status = "已完成" if all_complete else ("未开始" if completion == 0 else "学习中")
+        return ChapterProgress(
+            chapter["id"], learned_count, len(card_ids), diagram_completed,
+            completion, status, int(quiz["attempts"]), quiz_passed,
+        )
     completion = card_ratio if not experiment_id else 0.5 * card_ratio + 0.5 * experiment_completed
     quiz = repository.quiz_summary(chapter["id"])
     quiz_passed = bool(quiz["passed_count"])

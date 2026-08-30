@@ -4,7 +4,7 @@ from dianzhentong.course import (
     COURSES, SECOND_COURSE_CHAPTERS, THIRD_COURSE, THIRD_COURSE_CHAPTERS,
     course_is_unlocked,
 )
-from dianzhentong.diagram_learning import DIAGRAM_LESSONS, diagram_lesson_for_chapter
+from dianzhentong.diagram_learning import DIAGRAM_CASES, cases_for_chapter, diagram_lesson_for_chapter
 from dianzhentong.quiz import QuizAnswer, make_quiz_record, questions_for_chapter
 from dianzhentong.storage import MemoryPracticeRepository
 
@@ -12,13 +12,13 @@ from dianzhentong.storage import MemoryPracticeRepository
 def test_third_course_has_three_chapters_and_safe_diagram_lessons():
     assert COURSES[-1] == THIRD_COURSE
     assert len(THIRD_COURSE_CHAPTERS) == 3
-    assert set(DIAGRAM_LESSONS) == {item["id"] for item in THIRD_COURSE_CHAPTERS}
-    text = str(DIAGRAM_LESSONS)
+    assert len(DIAGRAM_CASES) == 6
+    text = str(DIAGRAM_CASES)
     for forbidden in ("220V", "380V", "端子号", "短接验证", "带电测量"):
         assert forbidden not in text
     for chapter in THIRD_COURSE_CHAPTERS:
         lesson = diagram_lesson_for_chapter(chapter["id"])
-        assert lesson and lesson["answer"] in lesson["options"]
+        assert lesson and len(cases_for_chapter(chapter["id"])) == 2
 
 
 def test_each_diagram_chapter_has_five_questions():

@@ -24,7 +24,10 @@ from dianzhentong.learning import (
     relationship_steps,
     review_cards,
 )
-from dianzhentong.diagram_learning import diagram_lesson_for_chapter
+from dianzhentong.diagram_learning import (
+    DIAGRAM_CASES, SAFETY_NOTICE, DiagramTrainingSession,
+    cases_for_chapter, diagram_lesson_for_chapter,
+)
 from dianzhentong.course import (
     ALL_CHAPTERS,
     CHAPTERS,
@@ -57,15 +60,16 @@ from dianzhentong.quiz import (
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
-if not hasattr(storage_module.ResilientPracticeRepository, "export_snapshot"):
+if not hasattr(storage_module.ResilientPracticeRepository, "diagram_summary"):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
+make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "1.8"
-STORAGE_CACHE_VERSION = "1.8-diagram-v1"
+UI_STATE_VERSION = "1.9"
+STORAGE_CACHE_VERSION = "1.9-interactive-diagram-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -162,6 +166,11 @@ def start_similar_quiz(question_id: str) -> None:
     }
     set_stage(10)
 
+def start_diagram_training(case_id: str) -> None:
+    st.session_state.diagram_training = DiagramTrainingSession(case_id).to_dict()
+    st.session_state.last_learning_chapter_id = DIAGRAM_CASES[case_id]["chapter_id"]
+    set_stage(13)
+
 def start_comprehensive_training() -> None:
     experiment_id = secrets.choice(list(catalog))
     prepare_task(experiment_id, "综合训练")
@@ -194,7 +203,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -584,6 +593,17 @@ elif stage == 5:
             start_chapter_quiz(target_chapter, True); st.rerun()
     else:
         st.caption("完成章节测验后，这里会显示错题复习入口。")
+    st.subheader("互动识图训练")
+    diagram_overview = repository.diagram_summary()
+    diagram_metrics = st.columns(3)
+    diagram_metrics[0].metric("训练次数", diagram_overview["attempts"])
+    diagram_metrics[1].metric("已完成案例", f"{diagram_overview['completed_cases']} / {len(DIAGRAM_CASES)}")
+    diagram_metrics[2].metric("平均正确率", f"{diagram_overview['accuracy']:.0%}" if diagram_overview["accuracy"] is not None else "暂无")
+    if diagram_overview["weakest_step"]:
+        weak_step = next(step for case in DIAGRAM_CASES.values() for step in case["steps"] if step["id"] == diagram_overview["weakest_step"])
+        st.info(f"当前最常出错的逻辑点：{weak_step['prompt']}")
+    else:
+        st.caption("完成第三门课程的互动识图案例后，这里会显示路径掌握情况。")
     st.subheader("实验掌握进度")
     progress_rows = []
     for experiment_id, item in all_progress.items():
@@ -645,7 +665,7 @@ elif stage == 5:
         recent_rows = [{"时间": item["completed_at"].replace("T", " ")[:19], "预设故障": knowledge.results[item["scenario_id"]]["cause"], "诊断": "正确" if item["matched"] else "错误", "判断得分": f"{item['correct_judgments']}/{item['total_judgments']}", "不确定": item["uncertain_count"]} for item in recent]
         render_markdown_table(["时间", "预设故障", "诊断", "判断得分", "不确定"], recent_rows)
         with st.expander("清空学习记录"):
-            st.warning("清空后，练习成绩、知识卡标记、引导记录和连续天数都无法恢复；不会影响故障知识库。")
+            st.warning("清空后，练习成绩、知识卡标记、识图训练、引导记录和连续天数都无法恢复；不会影响故障知识库。")
             confirm_clear = st.checkbox("我确认删除全部本地学习与练习记录")
             if st.button("永久清空", disabled=not confirm_clear):
                 repository.clear(confirmed=True); st.success("学习记录已清空。"); st.rerun()
@@ -754,6 +774,12 @@ elif stage == 8:
         if st.button("立即学习推荐知识卡", type="primary", use_container_width=True):
             st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
             open_knowledge(missing_card); st.rerun()
+    elif next_action == "完成互动识图":
+        chapter_cases = cases_for_chapter(chapter["id"])
+        completed_ids = {item["case_id"] for item in repository.diagram_history(chapter["id"])}
+        target_case = next((item for item in chapter_cases if item["id"] not in completed_ids), chapter_cases[0])
+        if st.button("立即开始互动识图", type="primary", use_container_width=True):
+            start_diagram_training(target_case["id"]); st.rerun()
     elif next_action == "通过章节测验":
         if st.button("立即开始章节测验", type="primary", use_container_width=True):
             start_chapter_quiz(chapter["id"]); st.rerun()
@@ -771,19 +797,15 @@ elif stage == 8:
     if diagram_lesson:
         st.markdown("### 抽象逻辑识读")
         st.write(diagram_lesson["title"])
-        for flow in diagram_lesson["flows"]:
+        chapter_cases = cases_for_chapter(chapter["id"])
+        completed_case_ids = {item["case_id"] for item in repository.diagram_history(chapter["id"])}
+        for case, flow in zip(chapter_cases, diagram_lesson["flows"]):
             flow_html = "<b>→</b>".join(f"<span>{item}</span>" for item in flow)
             st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
+            marker = "✅" if case["id"] in completed_case_ids else "🧩"
+            if st.button(f"{marker} {case['title']}", key=f"diagram_case_{case['id']}", use_container_width=True):
+                start_diagram_training(case["id"]); st.rerun()
         st.caption("只表达功能角色和条件关系，不包含端子号、电压、真实导线或安装位置。")
-        logic_answer = st.radio(
-            diagram_lesson["prompt"], diagram_lesson["options"], index=None,
-            key=f"diagram_exercise_{chapter['id']}",
-        )
-        if logic_answer:
-            if logic_answer == diagram_lesson["answer"]:
-                st.success(f"判断正确：{diagram_lesson['explanation']}")
-            else:
-                st.warning(f"再想一想。正确判断是“{diagram_lesson['answer']}”：{diagram_lesson['explanation']}")
 
     if chapter["experiment_id"]:
         target_knowledge = KnowledgeBase(chapter["experiment_id"])
@@ -816,7 +838,7 @@ elif stage == 8:
             prepare_task(chapter["experiment_id"], "引导学习模式"); st.rerun()
         if st.button("开始随机故障练习", use_container_width=True):
             prepare_task(chapter["experiment_id"], "随机故障练习"); st.rerun()
-    else:
+    elif not diagram_lesson:
         st.caption("本章先学习基础概念，实验将在后续章节中开放。")
 
     st.markdown("### 复盘问题")
@@ -962,10 +984,11 @@ elif stage == 12:
         st.warning("当前记录可能在服务休眠、重启、更新或会话结束后丢失，建议下载JSON备份。")
     snapshot = repository.export_snapshot()
     record_count = sum(len(items) for items in snapshot.values())
-    metrics = st.columns(3)
+    metrics = st.columns(4)
     metrics[0].metric("练习记录", len(snapshot["practice_records"]))
     metrics[1].metric("学习活动", len(snapshot["learning_activities"]))
     metrics[2].metric("章节测验", len(snapshot["quiz_sessions"]))
+    metrics[3].metric("识图训练", len(snapshot["diagram_practice_records"]))
     st.markdown("### 导出")
     st.download_button(
         "下载JSON完整备份", data=archive_json_bytes(repository),
@@ -991,13 +1014,15 @@ elif stage == 12:
             st.success("文件校验通过，尚未写入任何记录。")
             st.write(
                 f"档案包含：练习 {preview.practice_records} 条、学习活动 "
-                f"{preview.learning_activities} 条、测验 {preview.quiz_sessions} 条。"
+                f"{preview.learning_activities} 条、测验 {preview.quiz_sessions} 条、"
+                f"识图训练 {preview.diagram_practice_records} 条。"
             )
             st.caption("导入按记录唯一标识去重；已有记录会保留，不会被较差或修改后的记录覆盖。")
             confirm_import = st.checkbox("我确认将以上匿名学习记录合并到当前档案")
             if st.button("确认导入", type="primary", disabled=not confirm_import, use_container_width=True):
                 result = import_archive(repository, archive, confirmed=True)
-                added = result["practice_records"] + result["learning_activities"] + result["quiz_sessions"]
+                added = (result["practice_records"] + result["learning_activities"]
+                         + result["quiz_sessions"] + result["diagram_practice_records"])
                 st.success(f"导入完成：新增 {added} 条，跳过重复 {result['duplicates']} 条。")
         except BackupValidationError as exc:
             st.error(f"无法导入：{exc}。当前学习记录未被修改。")
@@ -1005,3 +1030,62 @@ elif stage == 12:
         st.caption("当前还没有学习记录；仍可使用本页恢复以前导出的JSON档案。")
     if st.button("返回学习中心", use_container_width=True):
         set_stage(5); st.rerun()
+
+elif stage == 13:
+    raw_training = st.session_state.get("diagram_training")
+    try:
+        training = DiagramTrainingSession.from_dict(raw_training or {})
+    except (TypeError, ValueError, KeyError):
+        st.warning("识图训练状态已失效，请重新选择案例。")
+        if st.button("返回课程地图", use_container_width=True):
+            st.session_state.pop("diagram_training", None); set_stage(1); st.rerun()
+    else:
+        case = training.case
+        st.subheader(f"🧩 {case['title']}")
+        st.error(f"**模拟现象：** {case['phenomenon']}")
+        st.warning(SAFETY_NOTICE)
+        flow_html = "<b>→</b>".join(
+            f"<span style='font-weight:{'700' if index == training.index else '400'}'>{node}</span>"
+            for index, node in enumerate(case["nodes"])
+        )
+        st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
+        if not training.is_complete:
+            step = training.current_step
+            st.progress(training.index / len(case["steps"]), text=f"路径步骤 {training.index + 1} / {len(case['steps'])}")
+            st.markdown(f"### {step['prompt']}")
+            selected = st.radio("选择下一判断", step["options"], index=None,
+                                key=f"diagram_choice_{training.training_id}_{step['id']}_{len(training.first_answers)}")
+            if st.button("提交本步判断", type="primary", disabled=selected is None, use_container_width=True):
+                solved = training.answer(selected)
+                st.session_state.diagram_training = training.to_dict()
+                if solved: st.success(f"判断正确：{step['explanation']}")
+                else: st.warning(f"本次首次判断已记录。{step['explanation']} 请重新选择正确路径后继续。")
+                st.rerun()
+            if training.step_solved:
+                st.success(f"当前步骤已完成：{step['explanation']}")
+                if st.button("进入下一步", type="primary", use_container_width=True):
+                    training.next_step(); st.session_state.diagram_training = training.to_dict(); st.rerun()
+        else:
+            record = make_diagram_record(training)
+            repository.save_diagram_practice(record)
+            score = training.correct_steps / len(case["steps"])
+            st.progress(1.0, text="案例完成")
+            st.metric("首次判断得分", f"{training.correct_steps} / {len(case['steps'])}（{score:.0%}）")
+            if training.wrong_steps:
+                st.markdown("### 首次错误步骤")
+                for step_id in training.wrong_steps:
+                    step = next(item for item in case["steps"] if item["id"] == step_id)
+                    st.write(f"- {step['prompt']}：{step['explanation']}")
+            else:
+                st.success("全部步骤首次判断正确。")
+            st.markdown("### 推荐路径")
+            st.markdown(" → ".join(step["answer"] for step in case["steps"]))
+            st.markdown("### 对应知识卡")
+            st.write("、".join(KNOWLEDGE_CARDS[item]["title"] for item in case["card_ids"]))
+            chapter_cases = cases_for_chapter(case["chapter_id"])
+            next_case = next((item for item in chapter_cases if item["id"] != training.case_id), chapter_cases[0])
+            if st.button("再练一个案例", type="primary", use_container_width=True):
+                start_diagram_training(next_case["id"]); st.rerun()
+            if st.button("返回本章", use_container_width=True):
+                st.session_state.selected_chapter_id = case["chapter_id"]
+                st.session_state.pop("diagram_training", None); set_stage(8); st.rerun()

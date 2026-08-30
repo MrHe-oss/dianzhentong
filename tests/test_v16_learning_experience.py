@@ -39,9 +39,11 @@ def test_all_chapters_have_clear_learning_path_and_recommendation():
     repository = MemoryPracticeRepository()
     for chapter in ALL_CHAPTERS:
         steps = chapter_learning_steps(repository, chapter)
-        assert [item.name for item in steps] == [
-            "学习知识卡", "通过章节测验", "完成引导实验", "完成随机练习", "完成本章总结"
-        ]
+        names = [item.name for item in steps]
+        if chapter["id"] in {"diagram_symbols_roles", "series_parallel_logic", "control_path_tracing"}:
+            assert names == ["学习知识卡", "完成互动识图", "通过章节测验", "完成本章总结"]
+        else:
+            assert names == ["学习知识卡", "通过章节测验", "完成引导实验", "完成随机练习", "完成本章总结"]
         assert recommended_chapter_action(repository, chapter) in {item.name for item in steps}
 
 

@@ -55,6 +55,23 @@ class LearningActivity:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class DiagramPracticeRecord:
+    training_id: str
+    completed_at: str
+    local_date: str
+    chapter_id: str
+    case_id: str
+    correct_steps: int
+    total_steps: int
+    wrong_steps: tuple[str, ...]
+
+    def as_row(self) -> dict[str, Any]:
+        row = asdict(self)
+        row["wrong_steps"] = json.dumps(self.wrong_steps, ensure_ascii=False)
+        return row
+
+
 def beijing_now() -> datetime:
     return datetime.now(BEIJING_TZ)
 
@@ -86,6 +103,18 @@ def make_learning_activity(
         experiment_id=experiment_id,
         activity_type=activity_type,
         reference_id=reference_id,
+    )
+
+
+def make_diagram_record(session: Any, completed_at: datetime | None = None) -> DiagramPracticeRecord:
+    if not session.is_complete:
+        raise ValueError("识图训练尚未完成")
+    moment = (completed_at or beijing_now()).astimezone(BEIJING_TZ)
+    return DiagramPracticeRecord(
+        training_id=session.training_id, completed_at=moment.isoformat(timespec="seconds"),
+        local_date=moment.date().isoformat(), chapter_id=session.case["chapter_id"],
+        case_id=session.case_id, correct_steps=session.correct_steps,
+        total_steps=len(session.case["steps"]), wrong_steps=tuple(session.wrong_steps),
     )
 
 
@@ -157,6 +186,20 @@ class PracticeRepository:
                     total_count INTEGER NOT NULL,
                     passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
                     mode TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS diagram_practice_records (
+                    training_id TEXT PRIMARY KEY,
+                    completed_at TEXT NOT NULL,
+                    local_date TEXT NOT NULL,
+                    chapter_id TEXT NOT NULL,
+                    case_id TEXT NOT NULL,
+                    correct_steps INTEGER NOT NULL CHECK (correct_steps >= 0),
+                    total_steps INTEGER NOT NULL CHECK (total_steps > 0),
+                    wrong_steps TEXT NOT NULL
                 )
                 """
             )
@@ -316,7 +359,9 @@ class PracticeRepository:
         dates = {date.fromisoformat(item["local_date"]) for item in self.activities()}
         with self.connect() as connection:
             rows = connection.execute("SELECT completed_at FROM practice_records").fetchall()
+            diagram_rows = connection.execute("SELECT local_date FROM diagram_practice_records").fetchall()
         dates.update(beijing_date_from_iso(row["completed_at"]) for row in rows)
+        dates.update(date.fromisoformat(row["local_date"]) for row in diagram_rows)
         return dates
 
     def today_progress(self, today: date | None = None) -> dict[str, int]:
@@ -385,6 +430,45 @@ class PracticeRepository:
                 "question_accuracy": correct / total if total else None,
                 "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
 
+    def save_diagram_practice(self, record: DiagramPracticeRecord) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO diagram_practice_records
+                (training_id, completed_at, local_date, chapter_id, case_id,
+                 correct_steps, total_steps, wrong_steps)
+                VALUES (:training_id, :completed_at, :local_date, :chapter_id, :case_id,
+                        :correct_steps, :total_steps, :wrong_steps)""",
+                record.as_row(),
+            )
+        return cursor.rowcount == 1
+
+    def diagram_history(self, chapter_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM diagram_practice_records
+                WHERE (? IS NULL OR chapter_id = ?)
+                ORDER BY completed_at DESC, rowid DESC LIMIT ?""",
+                (chapter_id, chapter_id, max(1, min(int(limit), 1000))),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row); item["wrong_steps"] = json.loads(item["wrong_steps"]); result.append(item)
+        return result
+
+    def diagram_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        records = self.diagram_history(chapter_id, 1000)
+        correct = sum(item["correct_steps"] for item in records)
+        total = sum(item["total_steps"] for item in records)
+        completed_cases = len({item["case_id"] for item in records})
+        wrong_counts: dict[str, int] = {}
+        for item in records:
+            for step_id in item["wrong_steps"]:
+                wrong_counts[step_id] = wrong_counts.get(step_id, 0) + 1
+        weakest = max(wrong_counts, key=lambda key: (wrong_counts[key], key), default=None)
+        return {"attempts": len(records), "completed_cases": completed_cases,
+                "correct_steps": correct, "total_steps": total,
+                "accuracy": correct / total if total else None, "weakest_step": weakest}
+
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         """导出匿名原始学习记录；不包含路径、账号或设备信息。"""
         with self.connect() as connection:
@@ -400,6 +484,9 @@ class PracticeRepository:
             answers = [dict(row) for row in connection.execute(
                 "SELECT * FROM quiz_answers ORDER BY quiz_id, rowid"
             ).fetchall()]
+            diagrams = [dict(row) for row in connection.execute(
+                "SELECT * FROM diagram_practice_records ORDER BY completed_at, rowid"
+            ).fetchall()]
         for item in practices:
             item["matched"] = bool(item["matched"])
             item["wrong_nodes"] = json.loads(item["wrong_nodes"])
@@ -408,12 +495,15 @@ class PracticeRepository:
         for item in answers:
             item["is_correct"] = bool(item["is_correct"])
             item["uncertain"] = bool(item["uncertain"])
+        for item in diagrams:
+            item["wrong_steps"] = json.loads(item["wrong_steps"])
         grouped_answers: dict[str, list[dict[str, Any]]] = {}
         for item in answers:
             grouped_answers.setdefault(item.pop("quiz_id"), []).append(item)
         for item in sessions:
             item["answers"] = grouped_answers.get(item["quiz_id"], [])
-        return {"practice_records": practices, "learning_activities": activities, "quiz_sessions": sessions}
+        return {"practice_records": practices, "learning_activities": activities,
+                "quiz_sessions": sessions, "diagram_practice_records": diagrams}
 
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
@@ -423,7 +513,9 @@ class PracticeRepository:
             activity_cursor = connection.execute("DELETE FROM learning_activities")
             answer_cursor = connection.execute("DELETE FROM quiz_answers")
             quiz_cursor = connection.execute("DELETE FROM quiz_sessions")
-        return practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount + quiz_cursor.rowcount
+            diagram_cursor = connection.execute("DELETE FROM diagram_practice_records")
+        return (practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount
+                + quiz_cursor.rowcount + diagram_cursor.rowcount)
 
 
 class MemoryPracticeRepository:
@@ -433,6 +525,7 @@ class MemoryPracticeRepository:
         self.records: dict[str, PracticeRecord] = {}
         self.learning_records: dict[str, LearningActivity] = {}
         self.quiz_records: dict[str, Any] = {}
+        self.diagram_records: dict[str, DiagramPracticeRecord] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -514,6 +607,7 @@ class MemoryPracticeRepository:
     def active_dates(self) -> set[date]:
         dates = {date.fromisoformat(item.local_date) for item in self.learning_records.values()}
         dates.update(beijing_date_from_iso(item.completed_at) for item in self.records.values())
+        dates.update(date.fromisoformat(item.local_date) for item in self.diagram_records.values())
         return dates
 
     def today_progress(self, today: date | None = None) -> dict[str, int]:
@@ -565,6 +659,33 @@ class MemoryPracticeRepository:
                 "question_accuracy": correct / total if total else None,
                 "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
 
+    def save_diagram_practice(self, record: DiagramPracticeRecord) -> bool:
+        if record.training_id in self.diagram_records:
+            return False
+        self.diagram_records[record.training_id] = record
+        return True
+
+    def diagram_history(self, chapter_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        records = list(self.diagram_records.values())
+        if chapter_id:
+            records = [item for item in records if item.chapter_id == chapter_id]
+        records.sort(key=lambda item: item.completed_at, reverse=True)
+        return [{**asdict(item), "wrong_steps": list(item.wrong_steps)}
+                for item in records[:max(1, min(int(limit), 1000))]]
+
+    def diagram_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        records = self.diagram_history(chapter_id, 1000)
+        correct = sum(item["correct_steps"] for item in records)
+        total = sum(item["total_steps"] for item in records)
+        wrong_counts: dict[str, int] = {}
+        for item in records:
+            for step_id in item["wrong_steps"]:
+                wrong_counts[step_id] = wrong_counts.get(step_id, 0) + 1
+        weakest = max(wrong_counts, key=lambda key: (wrong_counts[key], key), default=None)
+        return {"attempts": len(records), "completed_cases": len({item["case_id"] for item in records}),
+                "correct_steps": correct, "total_steps": total,
+                "accuracy": correct / total if total else None, "weakest_step": weakest}
+
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         practices = []
         for record in sorted(self.records.values(), key=lambda item: item.completed_at):
@@ -579,7 +700,11 @@ class MemoryPracticeRepository:
             row = asdict(record)
             row["answers"] = [asdict(item) for item in record.answers]
             quizzes.append(row)
-        return {"practice_records": practices, "learning_activities": activities, "quiz_sessions": quizzes}
+        diagrams = [{**asdict(item), "wrong_steps": list(item.wrong_steps)} for item in sorted(
+            self.diagram_records.values(), key=lambda item: item.completed_at
+        )]
+        return {"practice_records": practices, "learning_activities": activities,
+                "quiz_sessions": quizzes, "diagram_practice_records": diagrams}
 
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
@@ -590,6 +715,8 @@ class MemoryPracticeRepository:
         self.learning_records.clear()
         count += len(self.quiz_records)
         self.quiz_records.clear()
+        count += len(self.diagram_records)
+        self.diagram_records.clear()
         return count
 
 
@@ -655,6 +782,15 @@ class ResilientPracticeRepository:
 
     def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         return self._call("quiz_summary", chapter_id)
+
+    def save_diagram_practice(self, record: DiagramPracticeRecord) -> bool:
+        return bool(self._call("save_diagram_practice", record))
+
+    def diagram_history(self, chapter_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        return self._call("diagram_history", chapter_id, limit)
+
+    def diagram_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        return self._call("diagram_summary", chapter_id)
 
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         return self._call("export_snapshot")

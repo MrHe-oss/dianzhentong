@@ -13,11 +13,12 @@ from .engine import KnowledgeBase
 from .learning import KNOWLEDGE_CARDS, cards_for_experiment
 from .progress import calculate_experiment_progress, learning_streak, beijing_today
 from .quiz import QUESTION_MAP, QuizAnswer, make_quiz_record
-from .storage import LearningActivity, PracticeRecord, beijing_now
+from .storage import DiagramPracticeRecord, LearningActivity, PracticeRecord, beijing_now
+from .diagram_learning import DIAGRAM_CASES
 
 
 ARCHIVE_FORMAT = "dianzhentong-learning-archive"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_ARCHIVE_BYTES = 5 * 1024 * 1024
 DISCLAIMER = "这是教学学习记录，不是职业资格、实训考核或能力认证证书。"
 
@@ -31,10 +32,12 @@ class ImportPreview:
     practice_records: int
     learning_activities: int
     quiz_sessions: int
+    diagram_practice_records: int = 0
 
     @property
     def total(self) -> int:
-        return self.practice_records + self.learning_activities + self.quiz_sessions
+        return (self.practice_records + self.learning_activities + self.quiz_sessions
+                + self.diagram_practice_records)
 
 
 def _iso(value: Any, field: str) -> str:
@@ -96,12 +99,17 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         raise BackupValidationError("不是电诊通学习档案")
     if set(archive) != {"format", "schema_version", "app_version", "exported_at", "privacy", "data"}:
         raise BackupValidationError("备份顶层结构异常")
-    if archive.get("schema_version") != SCHEMA_VERSION:
+    schema_version = archive.get("schema_version")
+    if schema_version not in {1, SCHEMA_VERSION}:
         raise BackupValidationError("备份版本不受支持")
     _iso(archive.get("exported_at"), "导出时间")
     data = archive.get("data")
-    if not isinstance(data, dict) or set(data) != {"practice_records", "learning_activities", "quiz_sessions"}:
+    expected = {"practice_records", "learning_activities", "quiz_sessions"}
+    if not isinstance(data, dict) or set(data) != (expected if schema_version == 1 else expected | {"diagram_practice_records"}):
         raise BackupValidationError("备份数据结构不完整")
+    if schema_version == 1:
+        data = {**data, "diagram_practice_records": []}
+        archive = {**archive, "data": data}
     if any(not isinstance(data[key], list) or len(data[key]) > 50_000 for key in data):
         raise BackupValidationError("备份记录数量异常")
 
@@ -183,19 +191,39 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             actual_correct += int(is_correct)
         if actual_correct != correct or passed != bool(total and correct / total >= 0.6):
             raise BackupValidationError("测验得分与答案不一致")
+
+    for item in data["diagram_practice_records"]:
+        required = {"training_id", "completed_at", "local_date", "chapter_id", "case_id", "correct_steps", "total_steps", "wrong_steps"}
+        if not isinstance(item, dict) or set(item) != required:
+            raise BackupValidationError("识图训练字段不完整")
+        case_id = _text(item["case_id"], "识图案例")
+        if case_id not in DIAGRAM_CASES or item["chapter_id"] != DIAGRAM_CASES[case_id]["chapter_id"]:
+            raise BackupValidationError("识图案例或章节无效")
+        _text(item["training_id"], "识图训练ID"); _iso(item["completed_at"], "识图完成时间")
+        try: date.fromisoformat(item["local_date"])
+        except (TypeError, ValueError) as exc: raise BackupValidationError("识图日期无效") from exc
+        correct = _integer(item["correct_steps"], "识图正确步骤")
+        total = _integer(item["total_steps"], "识图总步骤")
+        wrong = item["wrong_steps"]
+        if total != len(DIAGRAM_CASES[case_id]["steps"]) or correct > total or not isinstance(wrong, list):
+            raise BackupValidationError("识图训练得分无效")
+        case_steps = {step["id"] for step in DIAGRAM_CASES[case_id]["steps"]}
+        if len(wrong) != total - correct or len(wrong) != len(set(wrong)) or any(step not in case_steps for step in wrong):
+            raise BackupValidationError("识图错误步骤无效")
     return archive
 
 
 def preview_archive(archive: dict[str, Any]) -> ImportPreview:
     data = validate_archive(archive)["data"]
-    return ImportPreview(len(data["practice_records"]), len(data["learning_activities"]), len(data["quiz_sessions"]))
+    return ImportPreview(len(data["practice_records"]), len(data["learning_activities"]),
+                         len(data["quiz_sessions"]), len(data["diagram_practice_records"]))
 
 
 def import_archive(repository: Any, archive: dict[str, Any], confirmed: bool = False) -> dict[str, int]:
     archive = validate_archive(archive)
     if not confirmed:
-        return {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "duplicates": 0}
-    counts = {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "duplicates": 0}
+        return {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "duplicates": 0}
+    counts = {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "duplicates": 0}
     data = archive["data"]
     for item in data["practice_records"]:
         record = PracticeRecord(**{**item, "wrong_nodes": tuple(item["wrong_nodes"])})
@@ -211,6 +239,10 @@ def import_archive(repository: Any, archive: dict[str, Any], confirmed: bool = F
             datetime.fromisoformat(item["completed_at"]),
         )
         key = "quiz_sessions" if repository.save_quiz(record) else "duplicates"
+        counts[key] += 1
+    for item in data["diagram_practice_records"]:
+        record = DiagramPracticeRecord(**{**item, "wrong_steps": tuple(item["wrong_steps"])})
+        key = "diagram_practice_records" if repository.save_diagram_practice(record) else "duplicates"
         counts[key] += 1
     return counts
 
@@ -244,7 +276,9 @@ def build_learning_summary(repository: Any) -> str:
         )
     lines.extend([
         "", f"已掌握故障总数：{mastered_total}",
-        f"档案记录：练习{len(snapshot['practice_records'])}条、学习活动{len(snapshot['learning_activities'])}条、测验{len(snapshot['quiz_sessions'])}条。",
+        f"识图训练：{repository.diagram_summary()['attempts']}次，平均正确率"
+        + (f"{repository.diagram_summary()['accuracy']:.0%}。" if repository.diagram_summary()['accuracy'] is not None else "暂无。"),
+        f"档案记录：练习{len(snapshot['practice_records'])}条、学习活动{len(snapshot['learning_activities'])}条、测验{len(snapshot['quiz_sessions'])}条、识图训练{len(snapshot['diagram_practice_records'])}条。",
         "", DISCLAIMER,
         "档案不包含姓名、学校、邮箱、账号或设备信息。",
     ])
