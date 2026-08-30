@@ -16,11 +16,15 @@ from dianzhentong.learning import (
     review_cards,
 )
 from dianzhentong.course import (
+    ALL_CHAPTERS,
     CHAPTERS,
     COURSE,
+    COURSES,
+    COURSE_CHAPTERS,
     GLOSSARY,
     chapter_by_id,
     chapter_progress,
+    course_is_unlocked,
     experiment_learning_record,
 )
 from dianzhentong.insights import insight_for_result
@@ -44,8 +48,8 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.4"
-STORAGE_CACHE_VERSION = "1.4-quiz-v1"
+UI_STATE_VERSION = "1.5"
+STORAGE_CACHE_VERSION = "1.5-course-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -127,6 +131,10 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
     }
     set_stage(10)
 
+def start_comprehensive_training() -> None:
+    experiment_id = secrets.choice(list(catalog))
+    prepare_task(experiment_id, "综合训练")
+
 def start_practice(scenario_id: str) -> None:
     new_session = DiagnosticSession(knowledge)
     new_session.start(True, scenario_id=scenario_id)
@@ -185,7 +193,7 @@ with st.sidebar:
         set_stage(9); st.rerun()
     wrong_count = len(repository.wrong_question_ids())
     if wrong_count and st.button(f"📝 错题复习（{wrong_count}）", use_container_width=True):
-        wrong_chapter = next((item["id"] for item in CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
+        wrong_chapter = next((item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
         start_chapter_quiz(wrong_chapter, True); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
@@ -200,12 +208,32 @@ if stage == 1:
         st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
             set_stage(7); st.rerun()
-    st.subheader(COURSE["title"])
-    st.write(COURSE["description"])
-    chapter_states = [(chapter, chapter_progress(repository, chapter)) for chapter in CHAPTERS]
+    st.subheader("课程学习地图")
+    first_course_complete = course_is_unlocked(repository, COURSES[1]["id"])
+    course_columns = st.columns(2)
+    for index, course in enumerate(COURSES):
+        unlocked = index == 0 or first_course_complete
+        course_chapters = COURSE_CHAPTERS[course["id"]]
+        course_progress = sum(chapter_progress(repository, item).completion for item in course_chapters) / len(course_chapters)
+        with course_columns[index]:
+            st.markdown(
+                f'<div class="dzt-card"><h3>{course["title"]}</h3><p>{course["description"]}</p>'
+                f'<p><b>{"已解锁" if unlocked else "待解锁"}</b> · {course_progress:.0%}</p></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("进入课程" if unlocked else "完成第一门课程任一章节后解锁", key=f"course_{course['id']}", disabled=not unlocked, use_container_width=True):
+                st.session_state.selected_course_id = course["id"]; st.rerun()
+    selected_course_id = st.session_state.get("selected_course_id", COURSE["id"])
+    if selected_course_id not in COURSE_CHAPTERS or (selected_course_id != COURSE["id"] and not first_course_complete):
+        selected_course_id = COURSE["id"]
+    selected_course = next(item for item in COURSES if item["id"] == selected_course_id)
+    selected_chapters = COURSE_CHAPTERS[selected_course_id]
+    st.markdown(f"### {selected_course['title']}")
+    st.write(selected_course["description"])
+    chapter_states = [(chapter, chapter_progress(repository, chapter)) for chapter in selected_chapters]
     course_completion = sum(item.completion for _, item in chapter_states) / len(chapter_states)
     st.progress(course_completion, text=f"课程完成度 {course_completion:.0%}")
-    current_chapter = next((chapter for chapter, item in chapter_states if item.status != "已完成"), CHAPTERS[-1])
+    current_chapter = next((chapter for chapter, item in chapter_states if item.status != "已完成"), selected_chapters[-1])
     if st.button(f"继续学习：{current_chapter['title']}", type="primary", use_container_width=True):
         st.session_state.selected_chapter_id = current_chapter["id"]
         set_stage(8); st.rerun()
@@ -256,6 +284,8 @@ if stage == 1:
         symptoms = "、".join(experiment_knowledge.symptoms.values())
         with column:
             st.markdown(f'<div class="dzt-card"><h3>{experiment["name"]}</h3><p><b>{len(experiment_knowledge.scenario_ids)} 类</b>模拟故障</p><p>{experiment["scope"]}</p><p><small>现象：{symptoms}</small></p></div>', unsafe_allow_html=True)
+    if st.button("🎯 开始跨实验综合训练", use_container_width=True, help="系统随机选择一个实验和故障，完成安全确认后进入排查。"):
+        start_comprehensive_training(); st.rerun()
     chosen_experiment_id = st.radio("实验", experiment_options, index=experiment_options.index(knowledge.experiment_id), format_func=lambda item: catalog[item]["name"], horizontal=True, label_visibility="collapsed")
     mode_options = ["随机故障练习", "引导学习模式", "自由诊断演示"]
     saved_mode = st.session_state.get("practice_mode", "随机故障练习")
@@ -294,7 +324,9 @@ elif stage == 2:
     if st.button("确认并开始排查", type="primary", disabled=not (safe_simulation and safe_no_power and safe_education), use_container_width=True):
         try:
             current_mode = st.session_state.get("practice_mode", "随机故障练习")
-            scenario_id = secrets.choice(scenario_ids) if current_mode in {"随机故障练习", "引导学习模式"} else None
+            scenario_id = secrets.choice(scenario_ids) if (
+                current_mode in {"随机故障练习", "引导学习模式"} or current_mode == "综合训练"
+            ) else None
             session.start(True, scenario_id=scenario_id, symptom_id=st.session_state.get("selected_symptom_id", knowledge.default_symptom_id))
             save_session(session); set_stage(3); st.rerun()
         except SessionError as exc:
@@ -344,7 +376,7 @@ elif stage == 4:
             set_stage(3); st.rerun()
     else:
         result = session.result
-        scored_practice = session.scenario_id is not None and st.session_state.get("practice_mode") == "随机故障练习"
+        scored_practice = session.scenario_id is not None and st.session_state.get("practice_mode") in {"随机故障练习", "综合训练"}
         guided_practice = session.scenario_id is not None and st.session_state.get("practice_mode") == "引导学习模式"
         if scored_practice:
             repository.save(session.to_practice_record())
@@ -460,7 +492,7 @@ elif stage == 5:
     if wrong_ids:
         st.caption(f"目前有 {len(wrong_ids)} 个知识点题目需要复习，复习模式会优先抽取。")
         if st.button("开始错题优先复习", type="primary", use_container_width=True):
-            target_chapter = next(item["id"] for item in CHAPTERS if repository.wrong_question_ids(item["id"]))
+            target_chapter = next(item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"]))
             start_chapter_quiz(target_chapter, True); st.rerun()
     else:
         st.caption("完成章节测验后，这里会显示错题复习入口。")
@@ -614,7 +646,7 @@ elif stage == 7:
 
 elif stage == 8:
     selected_chapter_id = st.session_state.get("selected_chapter_id", CHAPTERS[0]["id"])
-    if selected_chapter_id not in {item["id"] for item in CHAPTERS}:
+    if selected_chapter_id not in {item["id"] for item in ALL_CHAPTERS}:
         selected_chapter_id = CHAPTERS[0]["id"]
     chapter = chapter_by_id(selected_chapter_id)
     chapter_state = chapter_progress(repository, chapter)
@@ -690,7 +722,7 @@ elif stage == 9:
 
 elif stage == 10:
     quiz = st.session_state.get("quiz_state")
-    if not quiz or quiz.get("chapter_id") not in {item["id"] for item in CHAPTERS}:
+    if not quiz or quiz.get("chapter_id") not in {item["id"] for item in ALL_CHAPTERS}:
         st.warning("测验状态已失效，请重新开始。")
         if st.button("返回课程地图", use_container_width=True):
             set_stage(1); st.rerun()

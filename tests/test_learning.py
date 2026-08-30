@@ -12,8 +12,8 @@ from dianzhentong.learning import (
 from dianzhentong.report import build_report
 
 
-def test_eight_complete_knowledge_cards_exist():
-    assert len(KNOWLEDGE_CARDS) == 8
+def test_complete_knowledge_cards_exist():
+    assert len(KNOWLEDGE_CARDS) == 9
     required = {"title", "principle", "role", "normal", "abnormal", "review"}
     assert all(required <= set(card) for card in KNOWLEDGE_CARDS.values())
     assert "待专业人员复核" in REVIEW_STATUS

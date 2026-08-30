@@ -15,10 +15,10 @@ def answer(question, selected=None):
     return QuizAnswer(question.id, value, question.answer, value == question.answer, value == "不确定")
 
 
-def test_bank_has_exactly_30_safe_questions_with_expected_distribution():
-    assert len(QUESTIONS) == 30
+def test_bank_has_safe_questions_with_expected_distribution():
+    assert len(QUESTIONS) == 40
     assert [len(questions_for_chapter(item["id"])) for item in CHAPTERS] == [6, 10, 7, 7]
-    assert len({item.id for item in QUESTIONS}) == 30
+    assert len({item.id for item in QUESTIONS}) == 40
     text = " ".join(item.stem + item.explanation for item in QUESTIONS)
     assert "短接验证" not in text
     assert "进行带电测量" not in text
@@ -97,4 +97,3 @@ def test_app_exposes_quiz_pages_without_pyarrow_components():
     assert "章节测验报告" in source
     assert "st.dataframe" not in source
     assert "st.table" not in source
-

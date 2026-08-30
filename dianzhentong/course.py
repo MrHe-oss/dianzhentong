@@ -12,6 +12,12 @@ COURSE = {
     "description": "从元件与安全基础出发，通过模拟实验学习电动机控制逻辑和故障排查思路。",
 }
 
+SECOND_COURSE = {
+    "id": "relay_contactor_control",
+    "title": "继电器—接触器控制基础",
+    "description": "从运行方式与保持逻辑出发，学习点动和连续运行的控制关系与模拟排查。",
+}
+
 CHAPTERS = (
     {
         "id": "safety_and_circuits",
@@ -55,6 +61,36 @@ CHAPTERS = (
     },
 )
 
+SECOND_COURSE_CHAPTERS = (
+    {
+        "id": "jog_continuous_basics",
+        "title": "1. 点动与连续运行方式",
+        "goal": "区分点动请求、连续启动请求以及公共控制条件。",
+        "points": ("点动运行特征", "连续运行特征", "共享条件与方式支路"),
+        "card_ids": ("jog_control",),
+        "experiment_id": "motor_jog_continuous",
+        "reflection": "为什么只有一种运行方式异常时，不应直接判断公共控制条件异常？",
+        "next": "自锁保持逻辑与模拟排查",
+    },
+    {
+        "id": "jog_continuous_training",
+        "title": "2. 自锁逻辑与综合训练",
+        "goal": "理解连续运行保持条件，并完成点动与连续运行故障排查。",
+        "points": ("自锁辅助触点", "现象分支", "公共条件到方式支路的排查顺序"),
+        "card_ids": ("self_hold", "button_contacts", "contactor_coil"),
+        "experiment_id": "motor_jog_continuous",
+        "reflection": "连续运行能启动但不能保持时，为什么要关注自锁而不是点动按钮？",
+        "next": "进入跨实验综合训练",
+    },
+)
+
+COURSES = (COURSE, SECOND_COURSE)
+COURSE_CHAPTERS = {
+    COURSE["id"]: CHAPTERS,
+    SECOND_COURSE["id"]: SECOND_COURSE_CHAPTERS,
+}
+ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS
+
 GLOSSARY = {
     "主回路": "向电动机等负载传递主要电能的回路。本平台不提供真实主回路接线指导。",
     "控制回路": "由按钮、保护触点和接触器线圈等组成，用于表达启停与保护逻辑的回路。",
@@ -83,7 +119,16 @@ class ChapterProgress:
 
 
 def chapter_by_id(chapter_id: str) -> dict[str, Any]:
-    return next(chapter for chapter in CHAPTERS if chapter["id"] == chapter_id)
+    return next(chapter for chapter in ALL_CHAPTERS if chapter["id"] == chapter_id)
+
+
+def course_is_unlocked(repository: Any, course_id: str) -> bool:
+    """第一门课程始终开放；完成第一门课程任一章节测验后解锁第二门。"""
+    if course_id == COURSE["id"]:
+        return True
+    if course_id == SECOND_COURSE["id"]:
+        return any(repository.quiz_summary(item["id"])["passed_count"] for item in CHAPTERS)
+    return False
 
 
 def chapter_progress(repository: Any, chapter: dict[str, Any]) -> ChapterProgress:
@@ -91,7 +136,7 @@ def chapter_progress(repository: Any, chapter: dict[str, Any]) -> ChapterProgres
     card_ids = set(chapter["card_ids"])
     learned = repository.learned_cards(experiment_id) if experiment_id else set()
     if not experiment_id:
-        learned = set().union(*(repository.learned_cards(item) for item in ("motor_dol_no_start", "motor_forward_reverse")))
+        learned = set().union(*(repository.learned_cards(item) for item in ("motor_dol_no_start", "motor_forward_reverse", "motor_jog_continuous")))
     learned_count = len(card_ids.intersection(learned))
     experiment_completed = False
     if experiment_id:
@@ -121,6 +166,7 @@ def experiment_learning_record(session: Any) -> dict[str, Any]:
     purposes = {
         "motor_dol_no_start": "理解直接启动控制逻辑，练习按上游到下游顺序排查。",
         "motor_forward_reverse": "区分正反转公共条件和方向支路，理解电气互锁的教学逻辑。",
+        "motor_jog_continuous": "区分点动、连续运行与公共条件，理解自锁保持的教学逻辑。",
     }
     return {
         "experiment": session.knowledge.experiment["name"],

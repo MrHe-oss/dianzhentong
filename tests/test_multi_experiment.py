@@ -34,9 +34,9 @@ def solve_scenario(knowledge: KnowledgeBase, scenario_id: str) -> DiagnosticSess
     return session
 
 
-def test_catalog_contains_two_experiments():
+def test_catalog_contains_three_experiments():
     catalog = KnowledgeBase.catalog()
-    assert set(catalog) == {"motor_dol_no_start", "motor_forward_reverse"}
+    assert set(catalog) == {"motor_dol_no_start", "motor_forward_reverse", "motor_jog_continuous"}
 
 
 @pytest.mark.parametrize("scenario_id", REVERSE_CASES)

@@ -72,6 +72,14 @@ KNOWLEDGE_CARDS: dict[str, dict[str, str]] = {
         "abnormal": "先根据一个方向还是两个方向不能启动，区分公共条件与方向支路问题。",
         "review": "先按故障现象选分支，再沿公共条件到方向条件排查，避免进入无关方向。",
     },
+    "jog_control": {
+        "title": "点动与连续运行",
+        "principle": "点动在按钮保持动作时建立运行条件，释放后结束；连续运行则通过自锁辅助触点维持控制条件。",
+        "role": "两种方式共享公共保护与接触器线圈，但按钮请求和保持逻辑不同。",
+        "normal": "模拟资料能区分点动请求、连续启动请求和连续保持状态。",
+        "abnormal": "根据一个方式还是两个方式异常，区分公共条件、按钮支路与自锁逻辑。",
+        "review": "先判断故障现象属于公共部分还是单一运行方式，再沿对应模拟逻辑排查。",
+    },
 }
 
 NODE_CARD_MAP: dict[str, str] = {
@@ -84,6 +92,9 @@ NODE_CARD_MAP: dict[str, str] = {
     "contactor_coil": "contactor_coil", "fr_forward_coil": "contactor_coil",
     "fr_reverse_coil": "contactor_coil",
     "fr_interlock": "electrical_interlock",
+    "jc_public_condition": "control_power", "jc_stop": "button_contacts",
+    "jc_jog_button": "jog_control", "jc_continuous_button": "button_contacts",
+    "jc_self_hold": "self_hold", "jc_coil": "contactor_coil",
 }
 
 EXPERIMENT_CARD_ORDER = {
@@ -95,6 +106,9 @@ EXPERIMENT_CARD_ORDER = {
         "fuse", "thermal_relay", "button_contacts", "contactor_coil",
         "electrical_interlock", "forward_reverse", "self_hold",
     ),
+    "motor_jog_continuous": (
+        "control_power", "button_contacts", "contactor_coil", "self_hold", "jog_control",
+    ),
 }
 
 RELATIONSHIP_STEPS = {
@@ -103,6 +117,9 @@ RELATIONSHIP_STEPS = {
     ),
     "motor_forward_reverse": (
         "公共控制条件", "方向启动按钮", "另一方向互锁触点", "对应接触器线圈",
+    ),
+    "motor_jog_continuous": (
+        "公共控制条件", "停止按钮", "点动或连续启动请求", "自锁保持条件", "接触器线圈",
     ),
 }
 

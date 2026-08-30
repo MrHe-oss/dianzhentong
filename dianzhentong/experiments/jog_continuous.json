@@ -1,0 +1,97 @@
+{
+  "version": "1.0",
+  "experiment": {
+    "id": "motor_jog_continuous",
+    "name": "三相异步电动机点动与连续运行",
+    "symptom": "选择点动或连续运行后，电动机未按教学逻辑启动",
+    "default_symptom_id": "both_unavailable",
+    "symptoms": [
+      {"id": "both_unavailable", "name": "点动与连续运行均不能启动"},
+      {"id": "jog_unavailable", "name": "点动不能启动，连续运行模拟正常"},
+      {"id": "continuous_unavailable", "name": "连续运行不能建立或保持"}
+    ],
+    "scope": "纯模拟、断电状态下的点动与连续运行控制逻辑教学",
+    "entry_node": "jc_public_condition"
+  },
+  "safety_notice": "本实验完全使用网页模拟资料，不连接真实设备。禁止依据本工具进行带电测量、拆线、短接、送电或强制元件动作。",
+  "answers": ["正常", "异常", "不确定"],
+  "nodes": [
+    {
+      "id": "jc_public_condition", "order": 1, "object": "公共控制条件（模拟）",
+      "question": "题目给出的公共控制条件是否正常？",
+      "expected": "模拟资料显示控制电源与公共保护条件可用。",
+      "offline_check": "只阅读状态卡，不进行真实电压测量、拆线或送电。",
+      "term_help": "公共控制条件同时影响点动与连续运行支路。",
+      "scenario_observations": {"正常": "模拟状态卡：公共控制条件可用。", "异常": "模拟状态卡：公共控制条件不可用。"},
+      "safety": "禁止在真实装置上带电测量，本步骤只读取模拟信息。",
+      "transitions": {"正常": "jc_stop", "异常": "jc_cause_public", "不确定": "jc_public_condition"}
+    },
+    {
+      "id": "jc_stop", "order": 2, "object": "停止按钮常闭触点（模拟）",
+      "question": "停止按钮未按下时，常闭触点模拟状态是否正常？",
+      "expected": "停止按钮未按下时，模拟常闭触点导通。",
+      "offline_check": "读取模拟通断卡，不操作真实控制箱。",
+      "term_help": "停止按钮常闭触点属于两个运行方式共享的控制条件。",
+      "scenario_observations": {"正常": "模拟通断卡：停止按钮常闭触点导通。", "异常": "模拟通断卡：停止按钮未按下但常闭触点不导通。"},
+      "safety": "不得依据本工具拆改真实按钮或控制线路。",
+      "transitions": {"正常": "jc_jog_button", "异常": "jc_cause_stop", "不确定": "jc_stop"}
+    },
+    {
+      "id": "jc_jog_button", "order": 3, "object": "点动按钮触点逻辑（模拟）",
+      "question": "点动按钮被按下时，其模拟触点状态是否符合点动请求？",
+      "expected": "模拟资料显示点动按钮动作后，对应启动条件形成。",
+      "offline_check": "只操作网页仿真按钮并阅读状态卡。",
+      "term_help": "点动要求按住按钮时建立动作条件，释放后不再维持。",
+      "scenario_observations": {"正常": "模拟状态卡：点动按钮动作后启动条件形成。", "异常": "模拟状态卡：点动按钮动作后启动条件未形成。"},
+      "safety": "本步骤不提供真实按钮接线或送电测试方法。",
+      "applies_to": ["jog_unavailable"],
+      "transitions": {"正常": "jc_continuous_button", "异常": "jc_cause_jog_button", "不确定": "jc_jog_button"}
+    },
+    {
+      "id": "jc_continuous_button", "order": 4, "object": "连续启动按钮触点逻辑（模拟）",
+      "question": "连续启动按钮动作后，模拟启动条件是否正常形成？",
+      "expected": "按钮动作后模拟常开触点闭合，形成连续运行启动请求。",
+      "offline_check": "只读取模拟按钮状态，不操作真实设备。",
+      "term_help": "连续启动按钮先建立启动请求，再由保持逻辑维持。",
+      "scenario_observations": {"正常": "模拟状态卡：连续启动按钮动作后启动条件形成。", "异常": "模拟状态卡：按钮动作后启动条件未形成。"},
+      "safety": "禁止据此进行真实接线、拆线或强制动作。",
+      "applies_to": ["continuous_unavailable"],
+      "transitions": {"正常": "jc_self_hold", "异常": "jc_cause_continuous_button", "不确定": "jc_continuous_button"}
+    },
+    {
+      "id": "jc_self_hold", "order": 5, "object": "自锁辅助触点逻辑（模拟）",
+      "question": "连续运行的模拟保持条件是否正常？",
+      "expected": "接触器模拟动作后，常开辅助触点形成保持条件。",
+      "offline_check": "阅读控制逻辑状态卡，不接触真实端子。",
+      "term_help": "自锁使启动按钮释放后，连续运行条件仍能维持。",
+      "scenario_observations": {"正常": "模拟状态卡：辅助触点形成保持条件。", "异常": "模拟状态卡：启动请求出现过，但保持条件未形成。"},
+      "safety": "严禁通过短接真实触点验证自锁。",
+      "applies_to": ["continuous_unavailable"],
+      "transitions": {"正常": "jc_coil", "异常": "jc_cause_self_hold", "不确定": "jc_self_hold"}
+    },
+    {
+      "id": "jc_coil", "order": 6, "object": "接触器线圈连续性（模拟）",
+      "question": "接触器线圈的模拟连续性结果是否正常？",
+      "expected": "模拟资料显示线圈连续，题设条件一致。",
+      "offline_check": "读取题目给出的模拟结果，不测量或拆卸真实接触器。",
+      "term_help": "线圈是点动与连续运行最终共享的动作元件。",
+      "scenario_observations": {"正常": "模拟连续性卡：接触器线圈连续。", "异常": "模拟连续性卡：接触器线圈不连续。"},
+      "safety": "本原型不提供真实线圈测量或拆卸步骤。",
+      "transitions": {"正常": "jc_inconsistent", "异常": "jc_cause_coil", "不确定": "jc_coil"}
+    }
+  ],
+  "results": [
+    {"id": "jc_cause_public", "cause": "模拟公共控制条件异常", "explanation": "共享的上游条件不可用，可解释点动与连续运行均不能启动。", "evidence": "公共控制条件状态异常。", "source": "继电器—接触器控制教学中的公共控制路径原理", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "both_unavailable"},
+    {"id": "jc_cause_stop", "cause": "模拟停止按钮常闭触点异常", "explanation": "公共电源条件正常，但停止按钮常闭控制条件中断。", "evidence": "停止按钮常闭触点状态异常。", "source": "低压控制按钮与控制回路通用原理", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "both_unavailable"},
+    {"id": "jc_cause_jog_button", "cause": "模拟点动按钮异常", "explanation": "点动按钮动作后未形成对应的启动请求。", "evidence": "点动按钮触点逻辑状态异常。", "source": "点动控制教学逻辑", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "jog_unavailable"},
+    {"id": "jc_cause_continuous_button", "cause": "模拟连续启动按钮异常", "explanation": "连续启动按钮动作后未形成启动请求。", "evidence": "连续启动按钮触点逻辑状态异常。", "source": "连续运行控制教学逻辑", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "continuous_unavailable"},
+    {"id": "jc_cause_self_hold", "cause": "模拟自锁辅助触点异常", "explanation": "启动请求能够出现，但按钮释放后保持条件未形成。", "evidence": "模拟自锁辅助触点状态异常。", "source": "接触器自锁控制教学逻辑", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "continuous_unavailable"},
+    {"id": "jc_cause_coil", "cause": "模拟接触器线圈异常", "explanation": "相关前序条件正常，但共享线圈模拟连续性异常。", "evidence": "接触器线圈模拟连续性状态异常。", "source": "低压接触器教学原理", "confidence": "教学规则已录入，待专业人员复核", "symptom_id": "both_unavailable"},
+    {"id": "jc_inconsistent", "cause": "现有信息不足或与限定故障范围不一致", "explanation": "当前适用的模拟条件均正常，不能在缺少证据时给出确定结论。", "evidence": "限定范围内未发现异常项。", "source": "本原型的保守诊断规则", "confidence": "不确定；需要重新检查模拟输入", "symptom_id": "both_unavailable"}
+  ],
+  "reflection_questions": [
+    "点动与连续运行均异常时，为什么应先检查公共条件？",
+    "连续运行能够启动但不能保持时，自锁逻辑提供了什么判断线索？",
+    "为什么网页模拟结果不能替代真实设备安全检查？"
+  ]
+}
