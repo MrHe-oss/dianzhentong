@@ -385,6 +385,36 @@ class PracticeRepository:
                 "question_accuracy": correct / total if total else None,
                 "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
 
+    def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        """导出匿名原始学习记录；不包含路径、账号或设备信息。"""
+        with self.connect() as connection:
+            practices = [dict(row) for row in connection.execute(
+                "SELECT * FROM practice_records ORDER BY completed_at, rowid"
+            ).fetchall()]
+            activities = [dict(row) for row in connection.execute(
+                "SELECT * FROM learning_activities ORDER BY occurred_at, rowid"
+            ).fetchall()]
+            sessions = [dict(row) for row in connection.execute(
+                "SELECT * FROM quiz_sessions ORDER BY completed_at, rowid"
+            ).fetchall()]
+            answers = [dict(row) for row in connection.execute(
+                "SELECT * FROM quiz_answers ORDER BY quiz_id, rowid"
+            ).fetchall()]
+        for item in practices:
+            item["matched"] = bool(item["matched"])
+            item["wrong_nodes"] = json.loads(item["wrong_nodes"])
+        for item in sessions:
+            item["passed"] = bool(item["passed"])
+        for item in answers:
+            item["is_correct"] = bool(item["is_correct"])
+            item["uncertain"] = bool(item["uncertain"])
+        grouped_answers: dict[str, list[dict[str, Any]]] = {}
+        for item in answers:
+            grouped_answers.setdefault(item.pop("quiz_id"), []).append(item)
+        for item in sessions:
+            item["answers"] = grouped_answers.get(item["quiz_id"], [])
+        return {"practice_records": practices, "learning_activities": activities, "quiz_sessions": sessions}
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
@@ -535,6 +565,22 @@ class MemoryPracticeRepository:
                 "question_accuracy": correct / total if total else None,
                 "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
 
+    def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        practices = []
+        for record in sorted(self.records.values(), key=lambda item: item.completed_at):
+            row = asdict(record)
+            row["wrong_nodes"] = list(record.wrong_nodes)
+            practices.append(row)
+        activities = [asdict(item) for item in sorted(
+            self.learning_records.values(), key=lambda item: item.occurred_at
+        )]
+        quizzes = []
+        for record in sorted(self.quiz_records.values(), key=lambda item: item.completed_at):
+            row = asdict(record)
+            row["answers"] = [asdict(item) for item in record.answers]
+            quizzes.append(row)
+        return {"practice_records": practices, "learning_activities": activities, "quiz_sessions": quizzes}
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
@@ -609,6 +655,9 @@ class ResilientPracticeRepository:
 
     def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         return self._call("quiz_summary", chapter_id)
+
+    def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        return self._call("export_snapshot")
 
     def clear(self, confirmed: bool = False) -> int:
         return int(self._call("clear", confirmed))

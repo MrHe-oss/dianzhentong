@@ -5,6 +5,15 @@ import importlib
 import secrets
 import streamlit as st
 
+from dianzhentong.backup import (
+    BackupValidationError,
+    archive_json_bytes,
+    build_learning_summary,
+    import_archive,
+    parse_archive,
+    preview_archive,
+)
+
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
 from dianzhentong.learning import (
@@ -46,15 +55,15 @@ from dianzhentong.quiz import (
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
-if not hasattr(storage_module.ResilientPracticeRepository, "quiz_summary"):
+if not hasattr(storage_module.ResilientPracticeRepository, "export_snapshot"):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.6"
-STORAGE_CACHE_VERSION = "1.6-learning-path-v1"
+UI_STATE_VERSION = "1.7"
+STORAGE_CACHE_VERSION = "1.7-backup-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -99,6 +108,10 @@ def reset_all() -> None:
 
 def set_stage(stage: int) -> None:
     st.session_state.stage = stage
+
+def mark_exported() -> None:
+    from dianzhentong.storage import beijing_now
+    st.session_state.last_exported_at = beijing_now().isoformat(timespec="seconds")
 
 def open_knowledge(card_id: str | None = None) -> None:
     if card_id:
@@ -179,7 +192,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -207,6 +220,8 @@ with st.sidebar:
         set_stage(1); st.rerun()
     if st.button("📖 电气术语", use_container_width=True):
         set_stage(9); st.rerun()
+    if st.button("💾 学习档案备份", use_container_width=True):
+        set_stage(12); st.rerun()
     wrong_count = len(repository.wrong_question_ids())
     if wrong_count and st.button(f"📝 错题复习（{wrong_count}）", use_container_width=True):
         wrong_chapter = next((item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
@@ -518,6 +533,16 @@ elif stage == 5:
         st.warning("云端成绩与进度使用临时存储，服务重启或更新后可能清空。")
     if not repository.persistent:
         st.warning("SQLite当前不可用，已切换到内存记录；关闭或重启应用后数据会丢失。")
+    total_learning_records = sum(len(items) for items in repository.export_snapshot().values())
+    if config.storage_is_temporary and total_learning_records:
+        st.info("云端记录可能在休眠、重启或更新后丢失，建议定期下载匿名JSON备份。")
+    if total_learning_records >= 5 and not st.session_state.get("last_exported_at"):
+        st.warning("你已经积累了多条学习记录，建议现在导出一次备份。")
+    backup_columns = st.columns(2)
+    if backup_columns[0].button("导出或恢复学习档案", type="primary", use_container_width=True):
+        set_stage(12); st.rerun()
+    last_exported_at = st.session_state.get("last_exported_at")
+    backup_columns[1].metric("本次会话最近导出", last_exported_at.replace("T", " ")[:16] if last_exported_at else "尚未导出")
     all_progress = progress_map()
     overview = learning_overview(repository, all_progress)
     tasks = overview["tasks"]
@@ -910,3 +935,54 @@ elif stage == 11:
         if st.button("返回本章", use_container_width=True):
             st.session_state.selected_chapter_id = quiz["chapter_id"]
             st.session_state.pop("quiz_state", None); set_stage(8); st.rerun()
+
+elif stage == 12:
+    st.subheader("💾 学习档案导出与恢复")
+    st.info("档案只包含课程、实验、答案、得分和时间，不包含姓名、学校、邮箱、账号或设备信息。")
+    if config.storage_is_temporary or not repository.persistent:
+        st.warning("当前记录可能在服务休眠、重启、更新或会话结束后丢失，建议下载JSON备份。")
+    snapshot = repository.export_snapshot()
+    record_count = sum(len(items) for items in snapshot.values())
+    metrics = st.columns(3)
+    metrics[0].metric("练习记录", len(snapshot["practice_records"]))
+    metrics[1].metric("学习活动", len(snapshot["learning_activities"]))
+    metrics[2].metric("章节测验", len(snapshot["quiz_sessions"]))
+    st.markdown("### 导出")
+    st.download_button(
+        "下载JSON完整备份", data=archive_json_bytes(repository),
+        file_name="电诊通_匿名学习档案.json", mime="application/json",
+        on_click=mark_exported, type="primary", use_container_width=True,
+    )
+    st.download_button(
+        "下载TXT学习摘要", data=build_learning_summary(repository).encode("utf-8"),
+        file_name="电诊通_学习档案摘要.txt", mime="text/plain",
+        on_click=mark_exported, use_container_width=True,
+    )
+    if st.session_state.get("last_exported_at"):
+        st.caption("本次会话最近导出：" + st.session_state.last_exported_at.replace("T", " ")[:19])
+    st.caption("TXT用于阅读；JSON用于以后恢复。请不要手工修改JSON内容。")
+    st.warning("学习档案不是职业资格、实训考核或能力认证证书。")
+
+    st.markdown("### 恢复JSON备份")
+    uploaded = st.file_uploader("选择电诊通JSON学习档案", type=["json"], accept_multiple_files=False)
+    if uploaded is not None:
+        try:
+            archive = parse_archive(uploaded.getvalue())
+            preview = preview_archive(archive)
+            st.success("文件校验通过，尚未写入任何记录。")
+            st.write(
+                f"档案包含：练习 {preview.practice_records} 条、学习活动 "
+                f"{preview.learning_activities} 条、测验 {preview.quiz_sessions} 条。"
+            )
+            st.caption("导入按记录唯一标识去重；已有记录会保留，不会被较差或修改后的记录覆盖。")
+            confirm_import = st.checkbox("我确认将以上匿名学习记录合并到当前档案")
+            if st.button("确认导入", type="primary", disabled=not confirm_import, use_container_width=True):
+                result = import_archive(repository, archive, confirmed=True)
+                added = result["practice_records"] + result["learning_activities"] + result["quiz_sessions"]
+                st.success(f"导入完成：新增 {added} 条，跳过重复 {result['duplicates']} 条。")
+        except BackupValidationError as exc:
+            st.error(f"无法导入：{exc}。当前学习记录未被修改。")
+    if not record_count:
+        st.caption("当前还没有学习记录；仍可使用本页恢复以前导出的JSON档案。")
+    if st.button("返回学习中心", use_container_width=True):
+        set_stage(5); st.rerun()
