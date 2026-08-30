@@ -27,18 +27,25 @@ from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
 from dianzhentong.provenance import provenance_for_result, resolved_sources
+from dianzhentong.quiz import (
+    QUESTION_MAP,
+    QuizAnswer,
+    make_quiz_record,
+    questions_for_chapter,
+    select_questions,
+)
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
-if not hasattr(storage_module.ResilientPracticeRepository, "learned_cards"):
+if not hasattr(storage_module.ResilientPracticeRepository, "quiz_summary"):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.3"
-STORAGE_CACHE_VERSION = "0.9-progress-v1"
+UI_STATE_VERSION = "1.4"
+STORAGE_CACHE_VERSION = "1.4-quiz-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -107,6 +114,19 @@ def prepare_task(experiment_id: str, mode: str) -> None:
     st.session_state.pop("diagnostic_state", None)
     set_stage(2)
 
+def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
+    wrong_ids = repository.wrong_question_ids(chapter_id) if review else []
+    selected = select_questions(chapter_id, 5, wrong_ids)
+    st.session_state.quiz_state = {
+        "chapter_id": chapter_id,
+        "mode": "wrong_review" if review else "chapter_quiz",
+        "question_ids": [item.id for item in selected],
+        "index": 0,
+        "answers": [],
+        "answered": False,
+    }
+    set_stage(10)
+
 def start_practice(scenario_id: str) -> None:
     new_session = DiagnosticSession(knowledge)
     new_session.start(True, scenario_id=scenario_id)
@@ -135,7 +155,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -163,6 +183,10 @@ with st.sidebar:
         set_stage(1); st.rerun()
     if st.button("📖 电气术语", use_container_width=True):
         set_stage(9); st.rerun()
+    wrong_count = len(repository.wrong_question_ids())
+    if wrong_count and st.button(f"📝 错题复习（{wrong_count}）", use_container_width=True):
+        wrong_chapter = next((item["id"] for item in CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
+        start_chapter_quiz(wrong_chapter, True); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
         with st.expander("查看检查记录"):
@@ -426,6 +450,20 @@ elif stage == 5:
     top_metrics[0].metric("连续学习", f"{overview['streak']} 天")
     top_metrics[1].metric("今日任务", f"{tasks['completed_count']} / 3")
     st.progress(tasks["completion"], text="今日任务完成度")
+    quiz_overview = repository.quiz_summary()
+    st.subheader("章节测验")
+    quiz_metrics = st.columns(2)
+    quiz_metrics[0].metric("测验次数", quiz_overview["attempts"])
+    quiz_accuracy = quiz_overview["question_accuracy"]
+    quiz_metrics[1].metric("答题正确率", f"{quiz_accuracy:.0%}" if quiz_accuracy is not None else "暂无")
+    wrong_ids = repository.wrong_question_ids()
+    if wrong_ids:
+        st.caption(f"目前有 {len(wrong_ids)} 个知识点题目需要复习，复习模式会优先抽取。")
+        if st.button("开始错题优先复习", type="primary", use_container_width=True):
+            target_chapter = next(item["id"] for item in CHAPTERS if repository.wrong_question_ids(item["id"]))
+            start_chapter_quiz(target_chapter, True); st.rerun()
+    else:
+        st.caption("完成章节测验后，这里会显示错题复习入口。")
     st.subheader("实验掌握进度")
     progress_rows = []
     for experiment_id, item in all_progress.items():
@@ -624,7 +662,18 @@ elif stage == 8:
     st.markdown("### 复盘问题")
     st.write(chapter["reflection"])
     st.success(f"**推荐下一步：** {chapter['next']}")
-    st.caption("章节小测将在 v1.4 加入，当前不伪造考试成绩。")
+    st.markdown("### 章节测验")
+    quiz_summary = repository.quiz_summary(chapter["id"])
+    if quiz_summary["attempts"]:
+        best = quiz_summary["best_score"]
+        st.write(f"已完成 {quiz_summary['attempts']} 次 · 最好成绩 {best:.0%} · {'已通过' if quiz_summary['passed_count'] else '尚未通过'}")
+    else:
+        st.caption("每次随机抽取5题，答对3题（60%）即通过；选择“不确定”不会被强行判为正确。")
+    if st.button("开始本章测验", type="primary", use_container_width=True):
+        start_chapter_quiz(chapter["id"]); st.rerun()
+    if repository.wrong_question_ids(chapter["id"]):
+        if st.button("复习本章错题", use_container_width=True):
+            start_chapter_quiz(chapter["id"], True); st.rerun()
     if st.button("返回课程地图", use_container_width=True):
         set_stage(1); st.rerun()
 
@@ -638,3 +687,98 @@ elif stage == 9:
     st.warning("本页不提供真实测量、拆线、短接或送电指导。")
     if st.button("返回课程地图", use_container_width=True):
         set_stage(1); st.rerun()
+
+elif stage == 10:
+    quiz = st.session_state.get("quiz_state")
+    if not quiz or quiz.get("chapter_id") not in {item["id"] for item in CHAPTERS}:
+        st.warning("测验状态已失效，请重新开始。")
+        if st.button("返回课程地图", use_container_width=True):
+            set_stage(1); st.rerun()
+    else:
+        chapter = chapter_by_id(quiz["chapter_id"])
+        question_ids = quiz["question_ids"]
+        index = min(int(quiz["index"]), len(question_ids) - 1)
+        question = QUESTION_MAP[question_ids[index]]
+        st.subheader(f"📝 {chapter['title']} · {'错题复习' if quiz['mode'] == 'wrong_review' else '章节测验'}")
+        st.progress((index + 1) / len(question_ids), text=f"第 {index + 1} / {len(question_ids)} 题")
+        st.markdown(f"### {question.stem}")
+        selected = st.radio(
+            "请选择一个答案", [*question.options, "不确定"], index=None,
+            key=f"quiz_choice_{question.id}_{index}",
+        )
+        if not quiz["answered"]:
+            if st.button("提交答案", type="primary", disabled=selected is None, use_container_width=True):
+                answer = QuizAnswer(
+                    question_id=question.id,
+                    selected_answer=selected,
+                    correct_answer=question.answer,
+                    is_correct=selected == question.answer,
+                    uncertain=selected == "不确定",
+                )
+                quiz["answers"].append({
+                    "question_id": answer.question_id, "selected_answer": answer.selected_answer,
+                    "correct_answer": answer.correct_answer, "is_correct": answer.is_correct,
+                    "uncertain": answer.uncertain,
+                })
+                quiz["answered"] = True
+                st.session_state.quiz_state = quiz
+                st.rerun()
+        else:
+            answer = quiz["answers"][-1]
+            if answer["is_correct"]:
+                st.success("回答正确。")
+            else:
+                st.error(f"本题正确答案：{question.answer}")
+            st.info(f"**解析：** {question.explanation}")
+            st.caption(f"对应知识点：{question.knowledge_point}。仅限教学模拟，不用于真实设备操作。")
+            if st.button("查看成绩" if index == len(question_ids) - 1 else "下一题", type="primary", use_container_width=True):
+                if index == len(question_ids) - 1:
+                    answers = tuple(QuizAnswer(**item) for item in quiz["answers"])
+                    record = make_quiz_record(quiz["chapter_id"], answers, quiz["mode"])
+                    repository.save_quiz(record)
+                    st.session_state.quiz_result_id = record.quiz_id
+                    st.session_state.quiz_state = {**quiz, "record": {
+                        "quiz_id": record.quiz_id, "correct_count": record.correct_count,
+                        "total_count": record.total_count, "passed": record.passed,
+                    }}
+                    set_stage(11)
+                else:
+                    quiz["index"] = index + 1; quiz["answered"] = False
+                    st.session_state.quiz_state = quiz
+                st.rerun()
+        if st.button("退出测验", use_container_width=True):
+            st.session_state.pop("quiz_state", None); set_stage(8); st.rerun()
+
+elif stage == 11:
+    quiz = st.session_state.get("quiz_state", {})
+    result = quiz.get("record")
+    if not result:
+        st.warning("没有可显示的测验结果。")
+    else:
+        chapter = chapter_by_id(quiz["chapter_id"])
+        score = result["correct_count"] / result["total_count"]
+        st.subheader("📋 章节测验报告")
+        st.markdown(f"### {chapter['title']}")
+        st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
+        if result["passed"]:
+            st.success("已达到60%通过标准，本章测验完成。")
+        else:
+            st.warning("尚未达到60%，建议先复习下方错题再测一次。")
+        wrong_answers = [item for item in quiz["answers"] if not item["is_correct"]]
+        if not wrong_answers:
+            st.success("本次没有错题，判断过程正确。")
+        else:
+            st.markdown("### 错题与知识点")
+            for item in wrong_answers:
+                question = QUESTION_MAP[item["question_id"]]
+                st.markdown(f"**{question.stem}**")
+                st.write(f"你的答案：{item['selected_answer']}；正确答案：{item['correct_answer']}")
+                st.info(question.explanation)
+        st.warning("测验仅用于电气知识学习，不得据此进行真实带电测量、拆线或送电操作。")
+        if wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
+            start_chapter_quiz(quiz["chapter_id"], True); st.rerun()
+        if st.button("再测一次", use_container_width=True):
+            start_chapter_quiz(quiz["chapter_id"]); st.rerun()
+        if st.button("返回本章", use_container_width=True):
+            st.session_state.selected_chapter_id = quiz["chapter_id"]
+            st.session_state.pop("quiz_state", None); set_stage(8); st.rerun()

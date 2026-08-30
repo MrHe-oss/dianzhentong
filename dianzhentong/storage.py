@@ -147,6 +147,33 @@ class PracticeRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS quiz_sessions (
+                    quiz_id TEXT PRIMARY KEY,
+                    chapter_id TEXT NOT NULL,
+                    completed_at TEXT NOT NULL,
+                    correct_count INTEGER NOT NULL,
+                    total_count INTEGER NOT NULL,
+                    passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+                    mode TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS quiz_answers (
+                    quiz_id TEXT NOT NULL,
+                    question_id TEXT NOT NULL,
+                    selected_answer TEXT NOT NULL,
+                    correct_answer TEXT NOT NULL,
+                    is_correct INTEGER NOT NULL CHECK (is_correct IN (0, 1)),
+                    uncertain INTEGER NOT NULL CHECK (uncertain IN (0, 1)),
+                    PRIMARY KEY (quiz_id, question_id),
+                    FOREIGN KEY (quiz_id) REFERENCES quiz_sessions(quiz_id)
+                )
+                """
+            )
 
     def save(self, record: PracticeRecord) -> bool:
         row = record.as_row()
@@ -306,13 +333,67 @@ class PracticeRepository:
             ),
         }
 
+    def save_quiz(self, record: Any) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO quiz_sessions
+                (quiz_id, chapter_id, completed_at, correct_count, total_count, passed, mode)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (record.quiz_id, record.chapter_id, record.completed_at, record.correct_count,
+                 record.total_count, int(record.passed), record.mode),
+            )
+            if cursor.rowcount != 1:
+                return False
+            connection.executemany(
+                """INSERT INTO quiz_answers
+                (quiz_id, question_id, selected_answer, correct_answer, is_correct, uncertain)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                [(record.quiz_id, item.question_id, item.selected_answer, item.correct_answer,
+                  int(item.is_correct), int(item.uncertain)) for item in record.answers],
+            )
+        return True
+
+    def quiz_history(self, chapter_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM quiz_sessions WHERE (? IS NULL OR chapter_id = ?)
+                ORDER BY completed_at DESC, rowid DESC LIMIT ?""",
+                (chapter_id, chapter_id, max(1, min(int(limit), 100))),
+            ).fetchall()
+        return [{**dict(row), "passed": bool(row["passed"])} for row in rows]
+
+    def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT a.question_id, SUM(CASE WHEN a.is_correct = 0 THEN 1 ELSE 0 END) wrongs,
+                          MAX(s.completed_at) latest
+                FROM quiz_answers a JOIN quiz_sessions s ON s.quiz_id = a.quiz_id
+                WHERE (? IS NULL OR s.chapter_id = ?) GROUP BY a.question_id
+                HAVING wrongs > 0 ORDER BY wrongs DESC, latest DESC""",
+                (chapter_id, chapter_id),
+            ).fetchall()
+        return [row["question_id"] for row in rows]
+
+    def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        history = self.quiz_history(chapter_id, 100)
+        attempts = len(history)
+        passed = sum(item["passed"] for item in history)
+        correct = sum(item["correct_count"] for item in history)
+        total = sum(item["total_count"] for item in history)
+        return {"attempts": attempts, "passed_count": passed,
+                "pass_rate": passed / attempts if attempts else None,
+                "question_accuracy": correct / total if total else None,
+                "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
         with self.connect() as connection:
             practice_cursor = connection.execute("DELETE FROM practice_records")
             activity_cursor = connection.execute("DELETE FROM learning_activities")
-        return practice_cursor.rowcount + activity_cursor.rowcount
+            answer_cursor = connection.execute("DELETE FROM quiz_answers")
+            quiz_cursor = connection.execute("DELETE FROM quiz_sessions")
+        return practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount + quiz_cursor.rowcount
 
 
 class MemoryPracticeRepository:
@@ -321,6 +402,7 @@ class MemoryPracticeRepository:
     def __init__(self):
         self.records: dict[str, PracticeRecord] = {}
         self.learning_records: dict[str, LearningActivity] = {}
+        self.quiz_records: dict[str, Any] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -418,6 +500,41 @@ class MemoryPracticeRepository:
             ),
         }
 
+    def save_quiz(self, record: Any) -> bool:
+        if record.quiz_id in self.quiz_records:
+            return False
+        self.quiz_records[record.quiz_id] = record
+        return True
+
+    def quiz_history(self, chapter_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        records = list(self.quiz_records.values())
+        if chapter_id:
+            records = [item for item in records if item.chapter_id == chapter_id]
+        records.sort(key=lambda item: item.completed_at, reverse=True)
+        return [{"quiz_id": item.quiz_id, "chapter_id": item.chapter_id,
+                 "completed_at": item.completed_at, "correct_count": item.correct_count,
+                 "total_count": item.total_count, "passed": item.passed, "mode": item.mode}
+                for item in records[:max(1, min(int(limit), 100))]]
+
+    def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
+        counts: dict[str, int] = {}
+        for record in self.quiz_records.values():
+            if chapter_id and record.chapter_id != chapter_id:
+                continue
+            for answer in record.answers:
+                if not answer.is_correct:
+                    counts[answer.question_id] = counts.get(answer.question_id, 0) + 1
+        return sorted(counts, key=lambda item: (-counts[item], item))
+
+    def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        history = self.quiz_history(chapter_id, 100)
+        attempts = len(history); passed = sum(item["passed"] for item in history)
+        correct = sum(item["correct_count"] for item in history); total = sum(item["total_count"] for item in history)
+        return {"attempts": attempts, "passed_count": passed,
+                "pass_rate": passed / attempts if attempts else None,
+                "question_accuracy": correct / total if total else None,
+                "best_score": max((item["correct_count"] / item["total_count"] for item in history if item["total_count"]), default=None)}
+
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
             return 0
@@ -425,6 +542,8 @@ class MemoryPracticeRepository:
         self.records.clear()
         count += len(self.learning_records)
         self.learning_records.clear()
+        count += len(self.quiz_records)
+        self.quiz_records.clear()
         return count
 
 
@@ -478,6 +597,18 @@ class ResilientPracticeRepository:
 
     def today_progress(self, today: date | None = None) -> dict[str, int]:
         return self._call("today_progress", today)
+
+    def save_quiz(self, record: Any) -> bool:
+        return bool(self._call("save_quiz", record))
+
+    def quiz_history(self, chapter_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        return self._call("quiz_history", chapter_id, limit)
+
+    def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
+        return self._call("wrong_question_ids", chapter_id)
+
+    def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
+        return self._call("quiz_summary", chapter_id)
 
     def clear(self, confirmed: bool = False) -> int:
         return int(self._call("clear", confirmed))

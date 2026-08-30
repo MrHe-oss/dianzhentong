@@ -78,6 +78,8 @@ class ChapterProgress:
     experiment_completed: bool
     completion: float
     status: str
+    quiz_attempts: int
+    quiz_passed: bool
 
 
 def chapter_by_id(chapter_id: str) -> dict[str, Any]:
@@ -98,8 +100,20 @@ def chapter_progress(repository: Any, chapter: dict[str, Any]) -> ChapterProgres
         )
     card_ratio = learned_count / len(card_ids) if card_ids else 1.0
     completion = card_ratio if not experiment_id else 0.5 * card_ratio + 0.5 * experiment_completed
-    status = "已完成" if completion == 1 else ("学习中" if completion else "未开始")
-    return ChapterProgress(chapter["id"], learned_count, len(card_ids), experiment_completed, completion, status)
+    quiz = repository.quiz_summary(chapter["id"])
+    quiz_passed = bool(quiz["passed_count"])
+    prerequisites_complete = completion == 1
+    if quiz_passed:
+        status = "已完成"
+    elif prerequisites_complete:
+        status = "待测验"
+        completion = 0.9
+    else:
+        status = "学习中" if completion else "未开始"
+    return ChapterProgress(
+        chapter["id"], learned_count, len(card_ids), experiment_completed,
+        completion, status, int(quiz["attempts"]), quiz_passed,
+    )
 
 
 def experiment_learning_record(session: Any) -> dict[str, Any]:
