@@ -23,9 +23,11 @@ from dianzhentong.course import (
     COURSE_CHAPTERS,
     GLOSSARY,
     chapter_by_id,
+    chapter_learning_steps,
     chapter_progress,
     course_is_unlocked,
     experiment_learning_record,
+    recommended_chapter_action,
 )
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
@@ -34,9 +36,12 @@ from dianzhentong.provenance import provenance_for_result, resolved_sources
 from dianzhentong.quiz import (
     QUESTION_MAP,
     QuizAnswer,
+    answer_feedback,
+    card_id_for_question,
     make_quiz_record,
     questions_for_chapter,
     select_questions,
+    similar_questions,
 )
 import dianzhentong.storage as storage_module
 
@@ -48,8 +53,8 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.5"
-STORAGE_CACHE_VERSION = "1.5-course-v1"
+UI_STATE_VERSION = "1.6"
+STORAGE_CACHE_VERSION = "1.6-learning-path-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -131,6 +136,17 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
     }
     set_stage(10)
 
+def start_similar_quiz(question_id: str) -> None:
+    question = QUESTION_MAP[question_id]
+    related = similar_questions(question_id, 1)
+    selected = related or (question,)
+    st.session_state.quiz_state = {
+        "chapter_id": question.chapter_id, "mode": "similar_review",
+        "question_ids": [item.id for item in selected], "index": 0,
+        "answers": [], "answered": False,
+    }
+    set_stage(10)
+
 def start_comprehensive_training() -> None:
     experiment_id = secrets.choice(list(catalog))
     prepare_task(experiment_id, "综合训练")
@@ -209,6 +225,12 @@ if stage == 1:
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
             set_stage(7); st.rerun()
     st.subheader("课程学习地图")
+    last_chapter_id = st.session_state.get("last_learning_chapter_id")
+    if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
+        last_chapter = chapter_by_id(last_chapter_id)
+        if st.button(f"继续上次学习：{last_chapter['title']}", type="primary", use_container_width=True):
+            st.session_state.selected_chapter_id = last_chapter_id
+            set_stage(8); st.rerun()
     first_course_complete = course_is_unlocked(repository, COURSES[1]["id"])
     course_columns = st.columns(2)
     for index, course in enumerate(COURSES):
@@ -221,6 +243,8 @@ if stage == 1:
                 f'<p><b>{"已解锁" if unlocked else "待解锁"}</b> · {course_progress:.0%}</p></div>',
                 unsafe_allow_html=True,
             )
+            if not unlocked:
+                st.caption("还差：通过第一门课程任意一个章节测验（达到60%）。")
             if st.button("进入课程" if unlocked else "完成第一门课程任一章节后解锁", key=f"course_{course['id']}", disabled=not unlocked, use_container_width=True):
                 st.session_state.selected_course_id = course["id"]; st.rerun()
     selected_course_id = st.session_state.get("selected_course_id", COURSE["id"])
@@ -236,6 +260,7 @@ if stage == 1:
     current_chapter = next((chapter for chapter, item in chapter_states if item.status != "已完成"), selected_chapters[-1])
     if st.button(f"继续学习：{current_chapter['title']}", type="primary", use_container_width=True):
         st.session_state.selected_chapter_id = current_chapter["id"]
+        st.session_state.last_learning_chapter_id = current_chapter["id"]
         set_stage(8); st.rerun()
     chapter_columns = st.columns(2)
     for index, (chapter, item) in enumerate(chapter_states):
@@ -247,6 +272,7 @@ if stage == 1:
             )
             if st.button("进入本章", key=f"chapter_{chapter['id']}", use_container_width=True):
                 st.session_state.selected_chapter_id = chapter["id"]
+                st.session_state.last_learning_chapter_id = chapter["id"]
                 set_stage(8); st.rerun()
     st.divider()
     current_progress = progress_map()
@@ -445,6 +471,23 @@ elif stage == 4:
             assert path is not None
             for index, step in enumerate(path["steps"], 1):
                 st.markdown(f"<div class='dzt-step'><b>{index}. {step['object']} → {step['answer']}</b><br><small>{step['observation']}</small></div>", unsafe_allow_html=True)
+        st.markdown("### 本次核心知识与下一步")
+        core_cards = review_cards(item["node_id"] for item in session.history)
+        if core_cards:
+            st.write("本次涉及：" + "、".join(item["title"] for item in core_cards))
+        first_wrong = next((item for item in session.history if item.get("is_correct") is False), None)
+        if first_wrong:
+            st.warning(
+                f"你最早在“{first_wrong['object']}”偏离推荐路径："
+                f"选择了“{first_wrong['answer']}”，推荐判断为“{first_wrong['expected_answer']}”。"
+            )
+        elif scored_practice:
+            st.success("你的判断顺序没有偏离本题推荐路径。")
+        experiment_card_ids = [item["id"] for item in cards_for_experiment(knowledge.experiment_id)]
+        experiment_progress = calculate_experiment_progress(
+            repository, knowledge.experiment_id, scenario_ids, experiment_card_ids
+        )
+        st.info(f"下一次学习建议：{experiment_progress.route_stage}")
         st.markdown("### 4. 完整检查记录")
         with st.expander("展开本次操作顺序"):
             for index, item in enumerate(session.history, 1):
@@ -482,6 +525,25 @@ elif stage == 5:
     top_metrics[0].metric("连续学习", f"{overview['streak']} 天")
     top_metrics[1].metric("今日任务", f"{tasks['completed_count']} / 3")
     st.progress(tasks["completion"], text="今日任务完成度")
+    last_chapter_id = st.session_state.get("last_learning_chapter_id")
+    if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
+        last_chapter = chapter_by_id(last_chapter_id)
+        st.info(f"最近学习位置：{last_chapter['title']} · 下一步：{recommended_chapter_action(repository, last_chapter)}")
+        if st.button("继续最近章节", use_container_width=True):
+            st.session_state.selected_chapter_id = last_chapter_id; set_stage(8); st.rerun()
+    st.subheader("课程完成情况")
+    for course in COURSES:
+        unlocked = course_is_unlocked(repository, course["id"])
+        st.markdown(f"**{course['title']}** · {'已解锁' if unlocked else '待解锁'}")
+        chapter_rows = []
+        for chapter in COURSE_CHAPTERS[course["id"]]:
+            item = chapter_progress(repository, chapter)
+            chapter_rows.append({
+                "章节": chapter["title"], "完成度": f"{item.completion:.0%}",
+                "测验": "已通过" if item.quiz_passed else "待通过",
+                "状态": item.status, "推荐下一步": recommended_chapter_action(repository, chapter),
+            })
+        render_markdown_table(["章节", "完成度", "测验", "状态", "推荐下一步"], chapter_rows)
     quiz_overview = repository.quiz_summary()
     st.subheader("章节测验")
     quiz_metrics = st.columns(2)
@@ -649,10 +711,32 @@ elif stage == 8:
     if selected_chapter_id not in {item["id"] for item in ALL_CHAPTERS}:
         selected_chapter_id = CHAPTERS[0]["id"]
     chapter = chapter_by_id(selected_chapter_id)
+    st.session_state.last_learning_chapter_id = chapter["id"]
     chapter_state = chapter_progress(repository, chapter)
     st.subheader(chapter["title"])
     st.info(f"**本章学习目标：** {chapter['goal']}")
     st.progress(chapter_state.completion, text=f"{chapter_state.status} · {chapter_state.completion:.0%}")
+    st.markdown("### 本章学习路径")
+    learning_steps = chapter_learning_steps(repository, chapter)
+    for index, item in enumerate(learning_steps, 1):
+        marker = "✅" if item.status == "已完成" else ("▫️" if item.status == "本章无独立实验" else "👉")
+        st.write(f"{marker} {index}. **{item.name}** · {item.status}（{item.detail}）")
+    next_action = recommended_chapter_action(repository, chapter)
+    st.info(f"推荐下一步：{next_action}")
+    if next_action == "学习知识卡":
+        missing_card = next((item for item in chapter["card_ids"] if item not in repository.learned_cards(chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID)), chapter["card_ids"][0])
+        if st.button("立即学习推荐知识卡", type="primary", use_container_width=True):
+            st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
+            open_knowledge(missing_card); st.rerun()
+    elif next_action == "通过章节测验":
+        if st.button("立即开始章节测验", type="primary", use_container_width=True):
+            start_chapter_quiz(chapter["id"]); st.rerun()
+    elif next_action == "完成引导实验" and chapter["experiment_id"]:
+        if st.button("立即开始引导实验", type="primary", use_container_width=True):
+            prepare_task(chapter["experiment_id"], "引导学习模式"); st.rerun()
+    elif next_action == "完成随机练习" and chapter["experiment_id"]:
+        if st.button("立即开始随机练习", type="primary", use_container_width=True):
+            prepare_task(chapter["experiment_id"], "随机故障练习"); st.rerun()
     st.markdown("### 知识要点")
     for point in chapter["points"]:
         st.write(f"- {point}")
@@ -762,6 +846,7 @@ elif stage == 10:
             else:
                 st.error(f"本题正确答案：{question.answer}")
             st.info(f"**解析：** {question.explanation}")
+            st.write(f"**针对你的答案：** {answer_feedback(question, answer['selected_answer'])}")
             st.caption(f"对应知识点：{question.knowledge_point}。仅限教学模拟，不用于真实设备操作。")
             if st.button("查看成绩" if index == len(question_ids) - 1 else "下一题", type="primary", use_container_width=True):
                 if index == len(question_ids) - 1:
@@ -806,6 +891,17 @@ elif stage == 11:
                 st.markdown(f"**{question.stem}**")
                 st.write(f"你的答案：{item['selected_answer']}；正确答案：{item['correct_answer']}")
                 st.info(question.explanation)
+                st.write(f"**为什么这个答案不合适：** {answer_feedback(question, item['selected_answer'])}")
+                card_id = card_id_for_question(question.id)
+                card = KNOWLEDGE_CARDS[card_id]
+                st.caption(f"对应知识卡：{card['title']} · 知识点：{question.knowledge_point}")
+                action_columns = st.columns(2)
+                if action_columns[0].button("复习知识卡", key=f"quiz_card_{question.id}", use_container_width=True):
+                    chapter = chapter_by_id(question.chapter_id)
+                    st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
+                    open_knowledge(card_id); st.rerun()
+                if action_columns[1].button("再做一道相似题", key=f"similar_{question.id}", use_container_width=True):
+                    start_similar_quiz(question.id); st.rerun()
         st.warning("测验仅用于电气知识学习，不得据此进行真实带电测量、拆线或送电操作。")
         if wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"], True); st.rerun()

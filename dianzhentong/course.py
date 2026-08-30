@@ -118,6 +118,13 @@ class ChapterProgress:
     quiz_passed: bool
 
 
+@dataclass(frozen=True)
+class LearningStep:
+    name: str
+    status: str
+    detail: str
+
+
 def chapter_by_id(chapter_id: str) -> dict[str, Any]:
     return next(chapter for chapter in ALL_CHAPTERS if chapter["id"] == chapter_id)
 
@@ -129,6 +136,31 @@ def course_is_unlocked(repository: Any, course_id: str) -> bool:
     if course_id == SECOND_COURSE["id"]:
         return any(repository.quiz_summary(item["id"])["passed_count"] for item in CHAPTERS)
     return False
+
+
+def chapter_learning_steps(repository: Any, chapter: dict[str, Any]) -> tuple[LearningStep, ...]:
+    progress = chapter_progress(repository, chapter)
+    experiment_id = chapter["experiment_id"]
+    summary = repository.summary(experiment_id) if experiment_id else {"attempts": 0}
+    guided = sum(
+        item["activity_type"] == "guided_session"
+        for item in repository.activities(experiment_id)
+    ) if experiment_id else 0
+    cards_done = progress.learned_cards == progress.total_cards
+    return (
+        LearningStep("学习知识卡", "已完成" if cards_done else "进行中", f"{progress.learned_cards}/{progress.total_cards}"),
+        LearningStep("通过章节测验", "已完成" if progress.quiz_passed else "待完成", f"已测 {progress.quiz_attempts} 次"),
+        LearningStep("完成引导实验", "已完成" if guided else ("待完成" if experiment_id else "本章无独立实验"), f"{guided} 次"),
+        LearningStep("完成随机练习", "已完成" if int(summary["attempts"]) else ("待完成" if experiment_id else "本章无独立实验"), f"{summary['attempts']} 次"),
+        LearningStep("完成本章总结", "已完成" if progress.quiz_passed and (not experiment_id or int(summary["attempts"])) else "待完成", "复盘学习目标与错题"),
+    )
+
+
+def recommended_chapter_action(repository: Any, chapter: dict[str, Any]) -> str:
+    for step in chapter_learning_steps(repository, chapter):
+        if step.status in {"进行中", "待完成"}:
+            return step.name
+    return "本章已完成，可继续下一章"
 
 
 def chapter_progress(repository: Any, chapter: dict[str, Any]) -> ChapterProgress:

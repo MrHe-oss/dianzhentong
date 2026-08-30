@@ -7,6 +7,7 @@ from datetime import datetime
 from .engine import DiagnosticSession
 from .course import experiment_learning_record
 from .insights import insight_for_result
+from .learning import review_cards
 from .provenance import provenance_for_result, resolved_sources
 
 
@@ -121,6 +122,21 @@ def build_report(
                 f"   预期：{entry['expected']}",
             ]
         )
+
+    core_cards = review_cards(item["node_id"] for item in session.history)
+    lines.extend(["", "核心知识与下一步", "-" * 28])
+    lines.append("本次涉及：" + ("、".join(item["title"] for item in core_cards) if core_cards else "故障树证据判断"))
+    first_wrong = next((item for item in session.history if item.get("is_correct") is False), None)
+    if first_wrong:
+        lines.append(
+            f"最早偏离：{first_wrong['object']}；你的判断={first_wrong['answer']}；"
+            f"推荐判断={first_wrong['expected_answer']}"
+        )
+        suggested = review_cards([first_wrong["node_id"]])
+        lines.append("下一步建议：复习" + "、".join(item["title"] for item in suggested) + "后再练习同类故障。")
+    elif session.scenario_result is not None:
+        lines.append("路径表现：判断顺序未偏离本题推荐路径。")
+        lines.append("下一步建议：继续完成同实验随机练习，巩固不同故障现象。")
 
     learning_record = experiment_learning_record(session)
     lines.extend(

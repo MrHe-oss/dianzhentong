@@ -93,6 +93,46 @@ QUESTIONS = (
 
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
+QUESTION_CARD_MAP = {
+    **{f"q{number:02d}": "control_power" for number in range(1, 7)},
+    "q07": "button_contacts", "q08": "button_contacts", "q09": "fuse",
+    "q10": "thermal_relay", "q11": "contactor_coil", "q12": "button_contacts",
+    "q13": "thermal_relay", "q14": "button_contacts", "q15": "button_contacts",
+    "q16": "button_contacts", "q17": "control_power", "q18": "self_hold",
+    "q19": "contactor_coil", "q20": "control_power", "q21": "thermal_relay",
+    "q22": "button_contacts", "q23": "control_power", "q24": "forward_reverse",
+    "q25": "forward_reverse", "q26": "electrical_interlock", "q27": "button_contacts",
+    "q28": "contactor_coil", "q29": "forward_reverse", "q30": "electrical_interlock",
+    **{f"q{number:02d}": "jog_control" for number in (31, 32, 33, 34, 35, 38, 39)},
+    "q36": "self_hold", "q37": "self_hold", "q40": "self_hold",
+}
+
+
+def card_id_for_question(question_id: str) -> str:
+    return QUESTION_CARD_MAP[question_id]
+
+
+def answer_feedback(question: QuizQuestion, selected_answer: str) -> str:
+    if selected_answer == question.answer:
+        return f"你的选择与本题考查的“{question.knowledge_point}”一致。"
+    if selected_answer == "不确定":
+        return f"本题已经给出足够的教学条件；对照“{question.knowledge_point}”后可以确定答案。"
+    return (
+        f"“{selected_answer}”没有满足题目中的关键条件。"
+        f"本题应依据“{question.knowledge_point}”判断，而不是扩大到题目未提供的条件。"
+    )
+
+
+def similar_questions(question_id: str, limit: int = 2) -> tuple[QuizQuestion, ...]:
+    question = QUESTION_MAP[question_id]
+    candidates = [
+        item for item in QUESTIONS
+        if item.id != question_id and item.chapter_id == question.chapter_id
+        and (item.knowledge_point == question.knowledge_point
+             or card_id_for_question(item.id) == card_id_for_question(question_id))
+    ]
+    return tuple(candidates[: max(0, limit)])
+
 
 def questions_for_chapter(chapter_id: str) -> tuple[QuizQuestion, ...]:
     return tuple(item for item in QUESTIONS if item.chapter_id == chapter_id)
