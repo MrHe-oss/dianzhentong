@@ -8,11 +8,20 @@ import streamlit as st
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
 from dianzhentong.learning import (
+    KNOWLEDGE_CARDS,
     REVIEW_STATUS,
     card_for_node,
     cards_for_experiment,
     relationship_steps,
     review_cards,
+)
+from dianzhentong.course import (
+    CHAPTERS,
+    COURSE,
+    GLOSSARY,
+    chapter_by_id,
+    chapter_progress,
+    experiment_learning_record,
 )
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
@@ -28,7 +37,7 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.2"
+UI_STATE_VERSION = "1.3"
 STORAGE_CACHE_VERSION = "0.9-progress-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -126,7 +135,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -150,6 +159,10 @@ with st.sidebar:
         open_knowledge(); st.rerun()
     if st.button("🧭 第一次使用", use_container_width=True):
         set_stage(7); st.rerun()
+    if st.button("🗺️ 课程地图", use_container_width=True):
+        set_stage(1); st.rerun()
+    if st.button("📖 电气术语", use_container_width=True):
+        set_stage(9); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
         with st.expander("查看检查记录"):
@@ -163,6 +176,27 @@ if stage == 1:
         st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
             set_stage(7); st.rerun()
+    st.subheader(COURSE["title"])
+    st.write(COURSE["description"])
+    chapter_states = [(chapter, chapter_progress(repository, chapter)) for chapter in CHAPTERS]
+    course_completion = sum(item.completion for _, item in chapter_states) / len(chapter_states)
+    st.progress(course_completion, text=f"课程完成度 {course_completion:.0%}")
+    current_chapter = next((chapter for chapter, item in chapter_states if item.status != "已完成"), CHAPTERS[-1])
+    if st.button(f"继续学习：{current_chapter['title']}", type="primary", use_container_width=True):
+        st.session_state.selected_chapter_id = current_chapter["id"]
+        set_stage(8); st.rerun()
+    chapter_columns = st.columns(2)
+    for index, (chapter, item) in enumerate(chapter_states):
+        with chapter_columns[index % 2]:
+            st.markdown(
+                f'<div class="dzt-card"><h3>{chapter["title"]}</h3>'
+                f'<p>{chapter["goal"]}</p><p><b>{item.status}</b> · {item.completion:.0%}</p></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("进入本章", key=f"chapter_{chapter['id']}", use_container_width=True):
+                st.session_state.selected_chapter_id = chapter["id"]
+                set_stage(8); st.rerun()
+    st.divider()
     current_progress = progress_map()
     overview = learning_overview(repository, current_progress)
     tasks = overview["tasks"]
@@ -360,6 +394,14 @@ elif stage == 4:
             for index, item in enumerate(session.history, 1):
                 grade = " ✅" if item.get("is_correct") is True else (f" ❌（正确判断：{item['expected_answer']}）" if item.get("is_correct") is False else "")
                 st.write(f"{index}. {item['object']} → **{item['answer']}**{grade}")
+        learning_record = experiment_learning_record(session)
+        st.markdown("### 5. 实验学习记录")
+        st.write(f"**实验目的：** {learning_record['purpose']}")
+        st.write(f"**实验结果：** {learning_record['result']}")
+        st.write(f"**关键检查：** {' → '.join(learning_record['steps'])}")
+        with st.expander("实验复盘问题"):
+            for question in learning_record["reflection"]:
+                st.write(f"- {question}")
         report = build_report(session, include_score=scored_practice)
         st.download_button("下载文本学习报告", data=report.encode("utf-8"), file_name="电诊通_教学诊断报告.txt", mime="text/plain", use_container_width=True)
         if scored_practice:
@@ -530,4 +572,69 @@ elif stage == 7:
     st.warning("新手引导和正式练习都只使用网页模拟资料，不得用于真实设备诊断。")
     if st.button("我已学会，返回选择实验", type="primary", use_container_width=True):
         st.session_state.onboarding_seen = True
+        set_stage(1); st.rerun()
+
+elif stage == 8:
+    selected_chapter_id = st.session_state.get("selected_chapter_id", CHAPTERS[0]["id"])
+    if selected_chapter_id not in {item["id"] for item in CHAPTERS}:
+        selected_chapter_id = CHAPTERS[0]["id"]
+    chapter = chapter_by_id(selected_chapter_id)
+    chapter_state = chapter_progress(repository, chapter)
+    st.subheader(chapter["title"])
+    st.info(f"**本章学习目标：** {chapter['goal']}")
+    st.progress(chapter_state.completion, text=f"{chapter_state.status} · {chapter_state.completion:.0%}")
+    st.markdown("### 知识要点")
+    for point in chapter["points"]:
+        st.write(f"- {point}")
+
+    if chapter["experiment_id"]:
+        target_knowledge = KnowledgeBase(chapter["experiment_id"])
+        flow = relationship_steps(chapter["experiment_id"])
+        flow_html = "<b>→</b>".join(f"<span>{item}</span>" for item in flow)
+        st.markdown("### 控制逻辑关系")
+        st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
+        st.caption("只表达教学逻辑，不包含端子号、接线位置或真实电压。")
+    else:
+        target_knowledge = KnowledgeBase(DEFAULT_EXPERIMENT_ID)
+
+    st.markdown("### 本章知识卡")
+    if chapter["card_ids"]:
+        for card_id in chapter["card_ids"]:
+            card = KNOWLEDGE_CARDS[card_id]
+            learned_experiment = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
+            learned = card_id in repository.learned_cards(learned_experiment)
+            marker = "✅" if learned else "📘"
+            if st.button(f"{marker} {card['title']}", key=f"chapter_card_{card_id}", use_container_width=True):
+                st.session_state.selected_experiment_id = learned_experiment
+                st.session_state.selected_knowledge_card = card_id
+                open_knowledge(card_id); st.rerun()
+    else:
+        st.caption("本章暂无独立知识卡。")
+
+    if chapter["experiment_id"]:
+        st.markdown("### 本章模拟实验")
+        st.write(target_knowledge.experiment["name"])
+        if st.button("开始引导学习", type="primary", use_container_width=True):
+            prepare_task(chapter["experiment_id"], "引导学习模式"); st.rerun()
+        if st.button("开始随机故障练习", use_container_width=True):
+            prepare_task(chapter["experiment_id"], "随机故障练习"); st.rerun()
+    else:
+        st.caption("本章先学习基础概念，实验将在后续章节中开放。")
+
+    st.markdown("### 复盘问题")
+    st.write(chapter["reflection"])
+    st.success(f"**推荐下一步：** {chapter['next']}")
+    st.caption("章节小测将在 v1.4 加入，当前不伪造考试成绩。")
+    if st.button("返回课程地图", use_container_width=True):
+        set_stage(1); st.rerun()
+
+elif stage == 9:
+    st.subheader("📖 电气术语中心")
+    st.caption("术语解释用于理解教学模拟，不代替教材、设备说明书或安全规程。")
+    selected_term = st.selectbox("选择术语", list(GLOSSARY))
+    st.markdown(f"### {selected_term}")
+    st.info(GLOSSARY[selected_term])
+    st.write("学习建议：先确认元件的基准状态，再阅读题目中的模拟状态卡。")
+    st.warning("本页不提供真实测量、拆线、短接或送电指导。")
+    if st.button("返回课程地图", use_container_width=True):
         set_stage(1); st.rerun()

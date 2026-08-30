@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .engine import DiagnosticSession
+from .course import experiment_learning_record
 from .insights import insight_for_result
 from .provenance import provenance_for_result, resolved_sources
 
@@ -120,6 +121,20 @@ def build_report(
                 f"   预期：{entry['expected']}",
             ]
         )
+
+    learning_record = experiment_learning_record(session)
+    lines.extend(
+        [
+            "",
+            "实验学习记录",
+            "-" * 28,
+            f"实验目的：{learning_record['purpose']}",
+            f"实验结果：{learning_record['result']}",
+            f"关键检查：{' → '.join(learning_record['steps'])}",
+            "复盘问题：",
+        ]
+    )
+    lines.extend(f"- {question}" for question in learning_record["reflection"])
 
     lines.extend(["", "已排除项目", "-" * 28])
     lines.extend(f"- {item}" for item in session.eliminated)
