@@ -4,6 +4,7 @@ import pytest
 
 from dianzhentong.course import (
     ALL_CHAPTERS, COURSE, COURSES, COURSE_CHAPTERS, SECOND_COURSE_CHAPTERS,
+    THIRD_COURSE_CHAPTERS,
     course_is_unlocked,
 )
 from dianzhentong.engine import DiagnosticSession, KnowledgeBase
@@ -28,11 +29,12 @@ def solve(scenario_id: str) -> DiagnosticSession:
 
 
 def test_second_course_has_two_chapters_and_one_experiment():
-    assert len(COURSES) == 2
-    assert len(ALL_CHAPTERS) == 6
+    assert len(COURSES) == 3
+    assert len(ALL_CHAPTERS) == 9
     assert len(SECOND_COURSE_CHAPTERS) == 2
     assert {item["experiment_id"] for item in SECOND_COURSE_CHAPTERS} == {"motor_jog_continuous"}
     assert len(COURSE_CHAPTERS[COURSES[1]["id"]]) == 2
+    assert len(THIRD_COURSE_CHAPTERS) == 3
 
 
 @pytest.mark.parametrize("scenario_id", JOG_CASES)

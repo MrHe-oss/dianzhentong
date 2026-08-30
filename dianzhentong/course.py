@@ -18,6 +18,12 @@ SECOND_COURSE = {
     "description": "从运行方式与保持逻辑出发，学习点动和连续运行的控制关系与模拟排查。",
 }
 
+THIRD_COURSE = {
+    "id": "electrical_diagram_reading",
+    "title": "电气控制图识读基础",
+    "description": "用抽象逻辑图学习元件角色、串并联条件和控制路径追踪，不涉及真实接线。",
+}
+
 CHAPTERS = (
     {
         "id": "safety_and_circuits",
@@ -84,12 +90,46 @@ SECOND_COURSE_CHAPTERS = (
     },
 )
 
-COURSES = (COURSE, SECOND_COURSE)
+THIRD_COURSE_CHAPTERS = (
+    {
+        "id": "diagram_symbols_roles",
+        "title": "1. 图形符号与元件角色",
+        "goal": "从功能角色理解保护条件、操作信号、辅助触点和执行元件。",
+        "points": ("功能角色优先于外形记忆", "触点基准状态", "抽象图与真实接线的边界"),
+        "card_ids": ("diagram_symbols",),
+        "experiment_id": None,
+        "reflection": "为什么识图时应先判断元件角色，而不是只记住图形外观？",
+        "next": "串联条件与并联分支",
+    },
+    {
+        "id": "series_parallel_logic",
+        "title": "2. 串联条件与并联分支",
+        "goal": "理解串联表示条件同时满足，并联表示可选路径。",
+        "points": ("串联条件：逻辑与", "并联分支：逻辑或", "公共条件与局部分支"),
+        "card_ids": ("series_logic", "parallel_logic"),
+        "experiment_id": None,
+        "reflection": "一个公共条件异常时，为什么多个并联支路都可能失效？",
+        "next": "沿控制路径进行逻辑追踪",
+    },
+    {
+        "id": "control_path_tracing",
+        "title": "3. 控制路径追踪",
+        "goal": "按公共条件、操作分支和执行元件的顺序阅读抽象控制逻辑。",
+        "points": ("先公共后分支", "从现象缩小范围", "用证据形成完整逻辑链"),
+        "card_ids": ("logic_tracing",),
+        "experiment_id": None,
+        "reflection": "单一分支异常时，怎样避免检查无关分支？",
+        "next": "返回已有模拟实验，用识图思路复盘排查路径",
+    },
+)
+
+COURSES = (COURSE, SECOND_COURSE, THIRD_COURSE)
 COURSE_CHAPTERS = {
     COURSE["id"]: CHAPTERS,
     SECOND_COURSE["id"]: SECOND_COURSE_CHAPTERS,
+    THIRD_COURSE["id"]: THIRD_COURSE_CHAPTERS,
 }
-ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS
+ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS + THIRD_COURSE_CHAPTERS
 
 GLOSSARY = {
     "主回路": "向电动机等负载传递主要电能的回路。本平台不提供真实主回路接线指导。",
@@ -103,6 +143,9 @@ GLOSSARY = {
     "电气互锁": "利用另一方向接触器的常闭辅助触点，阻止两个方向同时形成动作条件。",
     "过载保护": "当负载状态超出规定范围时采取保护动作的机制，不等同于短路保护。",
     "直接启动": "教学中常见的电动机启动控制方式，本平台只模拟其控制逻辑与故障判断。",
+    "串联控制条件": "多个条件依次位于同一路径中；教学逻辑上通常需要同时满足。",
+    "并联控制分支": "控制路径分成可选支路；教学逻辑上任一有效支路可形成后续条件。",
+    "控制路径": "从公共条件经过操作或保护条件到执行元件的抽象逻辑关系，不代表真实导线走向。",
 }
 
 
@@ -130,12 +173,22 @@ def chapter_by_id(chapter_id: str) -> dict[str, Any]:
 
 
 def course_is_unlocked(repository: Any, course_id: str) -> bool:
-    """第一门课程始终开放；完成第一门课程任一章节测验后解锁第二门。"""
+    """课程逐级解锁：通过前一门课程任一章节测验。"""
     if course_id == COURSE["id"]:
         return True
     if course_id == SECOND_COURSE["id"]:
         return any(repository.quiz_summary(item["id"])["passed_count"] for item in CHAPTERS)
+    if course_id == THIRD_COURSE["id"]:
+        return any(repository.quiz_summary(item["id"])["passed_count"] for item in SECOND_COURSE_CHAPTERS)
     return False
+
+
+def course_unlock_requirement(course_id: str) -> str:
+    if course_id == SECOND_COURSE["id"]:
+        return "通过第一门课程任意一个章节测验（达到60%）"
+    if course_id == THIRD_COURSE["id"]:
+        return "通过第二门课程任意一个章节测验（达到60%）"
+    return "已开放"
 
 
 def chapter_learning_steps(repository: Any, chapter: dict[str, Any]) -> tuple[LearningStep, ...]:

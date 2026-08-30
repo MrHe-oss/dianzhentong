@@ -24,6 +24,7 @@ from dianzhentong.learning import (
     relationship_steps,
     review_cards,
 )
+from dianzhentong.diagram_learning import diagram_lesson_for_chapter
 from dianzhentong.course import (
     ALL_CHAPTERS,
     CHAPTERS,
@@ -35,6 +36,7 @@ from dianzhentong.course import (
     chapter_learning_steps,
     chapter_progress,
     course_is_unlocked,
+    course_unlock_requirement,
     experiment_learning_record,
     recommended_chapter_action,
 )
@@ -62,8 +64,8 @@ ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 
-UI_STATE_VERSION = "1.7"
-STORAGE_CACHE_VERSION = "1.7-backup-v1"
+UI_STATE_VERSION = "1.8"
+STORAGE_CACHE_VERSION = "1.8-diagram-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -246,10 +248,9 @@ if stage == 1:
         if st.button(f"继续上次学习：{last_chapter['title']}", type="primary", use_container_width=True):
             st.session_state.selected_chapter_id = last_chapter_id
             set_stage(8); st.rerun()
-    first_course_complete = course_is_unlocked(repository, COURSES[1]["id"])
-    course_columns = st.columns(2)
+    course_columns = st.columns(len(COURSES))
     for index, course in enumerate(COURSES):
-        unlocked = index == 0 or first_course_complete
+        unlocked = course_is_unlocked(repository, course["id"])
         course_chapters = COURSE_CHAPTERS[course["id"]]
         course_progress = sum(chapter_progress(repository, item).completion for item in course_chapters) / len(course_chapters)
         with course_columns[index]:
@@ -259,11 +260,11 @@ if stage == 1:
                 unsafe_allow_html=True,
             )
             if not unlocked:
-                st.caption("还差：通过第一门课程任意一个章节测验（达到60%）。")
-            if st.button("进入课程" if unlocked else "完成第一门课程任一章节后解锁", key=f"course_{course['id']}", disabled=not unlocked, use_container_width=True):
+                st.caption(f"还差：{course_unlock_requirement(course['id'])}。")
+            if st.button("进入课程" if unlocked else "完成前一门课程后解锁", key=f"course_{course['id']}", disabled=not unlocked, use_container_width=True):
                 st.session_state.selected_course_id = course["id"]; st.rerun()
     selected_course_id = st.session_state.get("selected_course_id", COURSE["id"])
-    if selected_course_id not in COURSE_CHAPTERS or (selected_course_id != COURSE["id"] and not first_course_complete):
+    if selected_course_id not in COURSE_CHAPTERS or not course_is_unlocked(repository, selected_course_id):
         selected_course_id = COURSE["id"]
     selected_course = next(item for item in COURSES if item["id"] == selected_course_id)
     selected_chapters = COURSE_CHAPTERS[selected_course_id]
@@ -765,6 +766,24 @@ elif stage == 8:
     st.markdown("### 知识要点")
     for point in chapter["points"]:
         st.write(f"- {point}")
+
+    diagram_lesson = diagram_lesson_for_chapter(chapter["id"])
+    if diagram_lesson:
+        st.markdown("### 抽象逻辑识读")
+        st.write(diagram_lesson["title"])
+        for flow in diagram_lesson["flows"]:
+            flow_html = "<b>→</b>".join(f"<span>{item}</span>" for item in flow)
+            st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
+        st.caption("只表达功能角色和条件关系，不包含端子号、电压、真实导线或安装位置。")
+        logic_answer = st.radio(
+            diagram_lesson["prompt"], diagram_lesson["options"], index=None,
+            key=f"diagram_exercise_{chapter['id']}",
+        )
+        if logic_answer:
+            if logic_answer == diagram_lesson["answer"]:
+                st.success(f"判断正确：{diagram_lesson['explanation']}")
+            else:
+                st.warning(f"再想一想。正确判断是“{diagram_lesson['answer']}”：{diagram_lesson['explanation']}")
 
     if chapter["experiment_id"]:
         target_knowledge = KnowledgeBase(chapter["experiment_id"])

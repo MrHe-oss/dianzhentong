@@ -19,7 +19,7 @@ def solve(knowledge: KnowledgeBase, scenario_id: str) -> DiagnosticSession:
 
 
 def test_every_question_has_unique_options_answer_explanation_and_card():
-    assert len(QUESTIONS) == 40
+    assert len(QUESTIONS) == 55
     for question in QUESTIONS:
         assert len(question.options) == len(set(question.options))
         assert question.answer in question.options
@@ -61,7 +61,7 @@ def test_all_twenty_fault_reports_include_learning_next_step():
 def test_app_has_navigation_unlock_feedback_and_mobile_guards():
     source = open("app.py", encoding="utf-8").read()
     for phrase in (
-        "继续上次学习", "还差：通过第一门课程任意一个章节测验",
+        "继续上次学习", "course_unlock_requirement",
         "本章学习路径", "为什么这个答案不合适", "再做一道相似题",
         "最近学习位置", "最早在",
     ):
