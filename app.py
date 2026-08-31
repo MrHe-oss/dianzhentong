@@ -20,6 +20,7 @@ from dianzhentong.assessment import (
 from dianzhentong.quick_experience import (
     EXPERIENCE_ITEMS, QuickExperienceSession, experience_report,
 )
+from dianzhentong.review_plan import build_review_plan
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
@@ -79,8 +80,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.2"
-STORAGE_CACHE_VERSION = "2.2-content-provenance-v1"
+UI_STATE_VERSION = "2.3"
+STORAGE_CACHE_VERSION = "2.3-review-plan-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -205,6 +206,15 @@ def start_practice(scenario_id: str) -> None:
     st.session_state.practice_mode = "随机故障练习"
     set_stage(3)
 
+def start_targeted_practice(experiment_id: str, scenario_id: str) -> None:
+    target = KnowledgeBase(experiment_id)
+    new_session = DiagnosticSession(target)
+    new_session.start(True, scenario_id=scenario_id)
+    st.session_state.selected_experiment_id = experiment_id
+    st.session_state.selected_symptom_id = target.default_symptom_id
+    st.session_state.practice_mode = "随机故障练习"
+    save_session(new_session); set_stage(3)
+
 def start_random_practice() -> None:
     start_practice(secrets.choice(scenario_ids))
 
@@ -238,7 +248,7 @@ def render_provenance(item: dict[str, object] | None, label: str = "参考资料
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -262,6 +272,8 @@ with st.sidebar:
         open_knowledge(); st.rerun()
     if st.button("📚 内容与资料", use_container_width=True):
         set_stage(17); st.rerun()
+    if st.button("🎯 10分钟复习", use_container_width=True):
+        set_stage(18); st.rerun()
     if st.button("🧭 第一次使用", use_container_width=True):
         set_stage(7); st.rerun()
     if st.button("🗺️ 课程地图", use_container_width=True):
@@ -360,6 +372,8 @@ if stage == 1:
     task_columns[0].metric("知识卡", "已完成" if tasks["knowledge"] else "0 / 1")
     task_columns[1].metric("引导学习", "已完成" if tasks["guided"] else "0 / 1")
     task_columns[2].metric("随机练习", f"{min(tasks['random_practices'], 2)} / 2")
+    if st.button("查看我的10分钟复习清单", type="primary", use_container_width=True):
+        set_stage(18); st.rerun()
     if not tasks["knowledge"]:
         if st.button("开始今日知识卡", use_container_width=True):
             target_cards = cards_for_experiment(recommended_id)
@@ -610,6 +624,8 @@ elif stage == 5:
     top_metrics[0].metric("连续学习", f"{overview['streak']} 天")
     top_metrics[1].metric("今日任务", f"{tasks['completed_count']} / 3")
     st.progress(tasks["completion"], text="今日任务完成度")
+    if st.button("打开个性化复习清单", type="primary", use_container_width=True):
+        set_stage(18); st.rerun()
     last_chapter_id = st.session_state.get("last_learning_chapter_id")
     if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
         last_chapter = chapter_by_id(last_chapter_id)
@@ -1323,3 +1339,28 @@ elif stage == 17:
     st.warning("这些资料用于解释抽象教学逻辑，不提供真实端子、电压、接线、测量或送电步骤。")
     if st.button("返回课程地图", use_container_width=True):
         set_stage(1); st.rerun()
+
+elif stage == 18:
+    st.subheader("🎯 我的10分钟复习清单")
+    st.caption("根据当前设备上的错题、识图错误和模拟故障成绩即时生成；不上传数据，也不额外计分。")
+    review_tasks = build_review_plan(repository)
+    total_minutes = sum(item.minutes for item in review_tasks)
+    st.info(f"今天建议完成 {len(review_tasks)} 项，预计 {total_minutes} 分钟。完成后重新打开本页，清单会按最新记录更新。")
+    for index, item in enumerate(review_tasks, 1):
+        st.markdown(f'<div class="dzt-card"><h3>{index}. {item.title} · {item.minutes}分钟</h3><p>{item.reason}</p></div>', unsafe_allow_html=True)
+        if item.kind == "knowledge":
+            if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                st.session_state.selected_experiment_id = item.experiment_id
+                open_knowledge(item.reference_id); st.rerun()
+        elif item.kind == "quiz":
+            if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                start_similar_quiz(item.reference_id); st.rerun()
+        elif item.kind == "diagram":
+            if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                start_diagram_training(item.reference_id); st.rerun()
+        elif item.kind == "fault":
+            if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                start_targeted_practice(item.experiment_id, item.reference_id); st.rerun()
+    st.warning("复习任务仅使用教学模拟记录生成，不代表真实设备能力评估或检修建议。")
+    if st.button("返回学习中心", use_container_width=True):
+        set_stage(5); st.rerun()
