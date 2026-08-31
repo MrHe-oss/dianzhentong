@@ -42,6 +42,7 @@ from dianzhentong.course import (
     COURSE,
     COURSES,
     COURSE_CHAPTERS,
+    FOURTH_COURSE,
     GLOSSARY,
     chapter_by_id,
     chapter_learning_steps,
@@ -50,6 +51,10 @@ from dianzhentong.course import (
     course_unlock_requirement,
     experiment_learning_record,
     recommended_chapter_action,
+)
+from dianzhentong.star_delta_learning import (
+    STAR_DELTA_STAGES, build_star_delta_course_summary,
+    diagram_choice_feedback, star_delta_summary_text,
 )
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
@@ -80,12 +85,12 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.5"
-STORAGE_CACHE_VERSION = "2.5-star-delta-course-v1"
+UI_STATE_VERSION = "2.6"
+STORAGE_CACHE_VERSION = "2.6-star-delta-learning-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
-.block-container{max-width:920px;padding-top:2rem;padding-bottom:4rem}.dzt-hero{padding:1.5rem 1.6rem;border-radius:20px;color:white;background:linear-gradient(135deg,#1d4ed8,#3b82f6);margin-bottom:1.2rem}.dzt-hero h1{margin:0;font-size:2.25rem}.dzt-hero p{margin:.45rem 0 0;opacity:.9}.dzt-card{min-height:168px;padding:1.1rem 1.2rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;margin-bottom:.75rem}.dzt-card h3{color:#172033;margin:0 0 .5rem;font-size:1.08rem}.dzt-card p{margin:.25rem 0;color:#475569}.dzt-step{padding:.8rem 1rem;border-left:4px solid #2563eb;border-radius:0 12px 12px 0;background:#eff6ff;margin:.5rem 0}.dzt-flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.8rem 0 1rem}.dzt-flow span{padding:.55rem .7rem;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.dzt-flow b{color:#60a5fa}div.stButton>button,div.stDownloadButton>button{border-radius:10px;min-height:2.8rem}[data-testid="stMetric"]{background:#f8fafc;border:1px solid #e2e8f0;padding:.8rem;border-radius:12px}
+.block-container{max-width:920px;padding-top:2rem;padding-bottom:4rem}.dzt-hero{padding:1.5rem 1.6rem;border-radius:20px;color:white;background:linear-gradient(135deg,#1d4ed8,#3b82f6);margin-bottom:1.2rem}.dzt-hero h1{margin:0;font-size:2.25rem}.dzt-hero p{margin:.45rem 0 0;opacity:.9}.dzt-card{min-height:168px;padding:1.1rem 1.2rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;margin-bottom:.75rem}.dzt-card h3{color:#172033;margin:0 0 .5rem;font-size:1.08rem}.dzt-card p{margin:.25rem 0;color:#475569}.dzt-step{padding:.8rem 1rem;border-left:4px solid #2563eb;border-radius:0 12px 12px 0;background:#eff6ff;margin:.5rem 0}.dzt-stage{padding:1rem 1.1rem;border:1px solid #bfdbfe;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f8fafc);margin:.65rem 0}.dzt-stage strong{color:#1d4ed8}.dzt-flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.8rem 0 1rem}.dzt-flow span{padding:.55rem .7rem;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.dzt-flow b{color:#60a5fa}div.stButton>button,div.stDownloadButton>button{border-radius:10px;min-height:2.8rem}[data-testid="stMetric"]{background:#f8fafc;border:1px solid #e2e8f0;padding:.8rem;border-radius:12px}
 @media(max-width:640px){.block-container{padding:1rem .85rem 3rem}.dzt-hero{padding:1.1rem;border-radius:15px}.dzt-hero h1{font-size:1.75rem}.dzt-card{min-height:0}[data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:.6rem}[data-testid="stHorizontalBlock"]>div{min-width:100%}}
 </style>""", unsafe_allow_html=True)
 
@@ -876,6 +881,22 @@ elif stage == 8:
     for point in chapter["points"]:
         st.write(f"- {point}")
 
+    if chapter["id"].startswith("star_delta_"):
+        st.markdown("### 启动阶段状态演示")
+        st.caption("点击阶段查看当前有效角色与进入下一阶段的条件。只表达抽象逻辑。")
+        stage_title = st.radio(
+            "选择阶段", [item["title"] for item in STAR_DELTA_STAGES], horizontal=True,
+            key=f"star_delta_stage_{chapter['id']}",
+        )
+        stage_item = next(item for item in STAR_DELTA_STAGES if item["title"] == stage_title)
+        role_html = "<br>".join(f"• {item}" for item in stage_item["roles"])
+        st.markdown(
+            f"<div class='dzt-stage'><strong>{stage_item['title']}</strong><p>{stage_item['description']}</p>"
+            f"<p>{role_html}</p><p><strong>下一条件：</strong>{stage_item['next_condition']}</p></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(" → ".join(item["title"] for item in STAR_DELTA_STAGES))
+
     diagram_lesson = diagram_lesson_for_chapter(chapter["id"])
     if diagram_lesson:
         st.markdown("### 抽象逻辑识读")
@@ -1141,6 +1162,13 @@ elif stage == 13:
             step = training.current_step
             st.progress(training.index / len(case["steps"]), text=f"路径步骤 {training.index + 1} / {len(case['steps'])}")
             st.markdown(f"### {step['prompt']}")
+            first_selected = training.first_answers.get(step["id"])
+            if first_selected is not None and first_selected != step["answer"] and case["chapter_id"].startswith("star_delta_"):
+                feedback = diagram_choice_feedback(training.case_id, training.index, first_selected)
+                st.markdown(f"<div class='dzt-stage'><strong>当前阶段：{feedback['stage']}</strong>"
+                            f"<p><strong>应判断：</strong>{feedback['role']}</p>"
+                            f"<p><strong>为什么：</strong>{feedback['reason']}</p>"
+                            f"<p><strong>推荐复习：</strong>{feedback['card_title']}</p></div>", unsafe_allow_html=True)
             selected = st.radio("选择下一判断", step["options"], index=None,
                                 key=f"diagram_choice_{training.training_id}_{step['id']}_{len(training.first_answers)}")
             if st.button("提交本步判断", type="primary", disabled=selected is None, use_container_width=True):
@@ -1261,11 +1289,27 @@ elif stage == 15:
                     st.session_state.last_learning_chapter_id = item["chapter_id"]
                     set_stage(8); st.rerun()
         else: st.success("本次没有错题，可继续下一门课程或进行巩固练习。")
+        star_summary = None
+        if course_id == FOURTH_COURSE["id"]:
+            star_summary = build_star_delta_course_summary(repository)
+            st.markdown("### 星—三角课程总结")
+            summary_metrics = st.columns(3)
+            summary_metrics[0].metric("完成章节", f"{star_summary['completed_chapters']} / 3")
+            summary_metrics[1].metric("识图训练", f"{star_summary['diagram_attempts']} 次")
+            summary_metrics[2].metric("识图正确率", f"{star_summary['diagram_accuracy']:.0%}")
+            for principle in star_summary["principles"]:
+                st.write(f"- {principle}")
+            if star_summary["weak_cards"]:
+                st.warning("建议复习：" + "、".join(item["title"] for item in star_summary["weak_cards"]))
+            else:
+                st.success("当前没有已记录的薄弱知识点，可继续巩固阶段顺序。")
         report_lines = ["电诊通｜课程学习总结", course["title"],
                         f"本次成绩：{result['correct_count']}/{result['total_count']}（{score:.0%}）",
                         f"内容来源：本次题目通过 {len(exam_sources)} 个知识主题映射到官方资料；核对状态请见应用内内容与资料中心。",
                         "能力情况：", *[f"- {item['name']}：{item['accuracy']:.0%}" for item in competency_report(answers)],
                         "", "仅用于教学学习，不是职业资格、实训考核或能力认证证书。"]
+        if star_summary:
+            report_lines.extend(("", star_delta_summary_text(star_summary)))
         st.download_button("下载课程学习总结", data="\n".join(report_lines).encode("utf-8"),
                            file_name="电诊通_课程学习总结.txt", mime="text/plain", use_container_width=True)
         if st.button("重新评测", type="primary", use_container_width=True): start_course_exam(course_id); st.rerun()
