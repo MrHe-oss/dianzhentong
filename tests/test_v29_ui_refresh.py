@@ -5,7 +5,7 @@ def test_v29_has_dashboard_navigation_and_responsive_visual_system():
     app = Path("app.py").read_text(encoding="utf-8")
     for phrase in (
         "今天继续学一点", "今日任务", "连续学习", "待复习",
-        "🏠 首页", "🗺️ 课程", "🧰 模拟实训", "🎯 复习", "📊 我的学习",
+        "📖 学习", "🧠 知识", "✍️ 练习", "🧰 实训", "📊 我的学习",
         "dzt-dashboard", "dzt-brandbar", "dzt-section-label",
     ):
         assert phrase in app
@@ -18,5 +18,5 @@ def test_v29_has_dashboard_navigation_and_responsive_visual_system():
 def test_v29_keeps_storage_schema_and_learning_content_unchanged():
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
     backup = Path("dianzhentong/backup.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "2.9"' in config
+    assert 'APP_VERSION = "3.0"' in config
     assert 'SCHEMA_VERSION = 3' in backup

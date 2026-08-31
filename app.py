@@ -56,6 +56,10 @@ from dianzhentong.course import (
     experiment_learning_record,
     recommended_chapter_action,
 )
+from dianzhentong.curriculum_catalog import (
+    BOOK_EDITION_MAPPINGS, KNOWLEDGE_TOPICS, LEARNING_DOMAINS,
+    topics_for_book_chapter,
+)
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -91,7 +95,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "2.9"
+UI_STATE_VERSION = "3.0"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -270,10 +274,58 @@ def render_provenance(item: dict[str, object] | None, label: str = "参考资料
             st.caption(f"用于核对：{source['scope']} · 最近核对：{source['checked_on']}")
         st.caption("来源仅支持通用原理核对；教学路径不等同于真实设备检修规程。")
 
+def render_experiment_selector() -> None:
+    st.markdown('<div class="dzt-section-label">Virtual training</div>', unsafe_allow_html=True)
+    st.subheader("选择一个虚拟实训")
+    st.caption("故障诊断是实训方式之一。所有任务只使用网页模拟资料。")
+    experiment_options = list(catalog)
+    card_columns = st.columns(len(experiment_options))
+    for column, experiment_id in zip(card_columns, experiment_options):
+        experiment_knowledge = KnowledgeBase(experiment_id)
+        experiment = catalog[experiment_id]
+        with column:
+            st.markdown(
+                f'<div class="dzt-card"><h3>{experiment["name"]}</h3>'
+                f'<p><b>{len(experiment_knowledge.scenario_ids)} 类</b>模拟故障</p>'
+                f'<p>{experiment["scope"]}</p></div>', unsafe_allow_html=True,
+            )
+    if st.button("🎯 开始跨实验综合训练", use_container_width=True):
+        start_comprehensive_training(); st.rerun()
+    chosen_experiment_id = st.radio(
+        "实训项目", experiment_options, index=experiment_options.index(knowledge.experiment_id),
+        format_func=lambda item: catalog[item]["name"], horizontal=True,
+    )
+    mode_options = ["随机故障练习", "引导学习模式", "自由诊断演示"]
+    saved_mode = st.session_state.get("practice_mode", mode_options[0])
+    mode = st.segmented_control(
+        "训练方式", mode_options,
+        default=saved_mode if saved_mode in mode_options else mode_options[0],
+        help="随机练习自动评分；引导模式先讲解；自由诊断用于探索规则。",
+    ) or mode_options[0]
+    chosen_knowledge = KnowledgeBase(chosen_experiment_id)
+    selected_symptom_id = chosen_knowledge.default_symptom_id
+    if mode == "自由诊断演示":
+        symptom_ids = list(chosen_knowledge.symptoms)
+        selected_symptom_id = st.radio(
+            "选择模拟故障现象", symptom_ids,
+            format_func=lambda item: chosen_knowledge.symptoms[item],
+        )
+    with st.expander("使用范围与隐私说明"):
+        st.write("应用不连接真实设备，也不要求姓名、邮箱或账号。")
+        if config.storage_is_temporary or not repository.persistent:
+            st.write("当前云端成绩为临时数据，服务休眠、重启或更新后可能丢失。")
+    st.warning(DISCLAIMER)
+    if st.button("继续安全确认", type="primary", use_container_width=True):
+        st.session_state.selected_experiment_id = chosen_experiment_id
+        st.session_state.practice_mode = mode
+        st.session_state.selected_symptom_id = selected_symptom_id
+        st.session_state.pop("diagnostic_state", None)
+        set_stage(2); st.rerun()
+
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -290,11 +342,10 @@ if stage <= 4:
 with st.sidebar:
     st.markdown("### ⚡ 电诊通")
     st.caption("电气专业学习与模拟实训")
-    if st.button("🏠 首页", use_container_width=True): set_stage(1); st.rerun()
-    if st.button("🗺️ 课程", use_container_width=True): set_stage(1); st.rerun()
-    if st.button("🧰 模拟实训", use_container_width=True):
-        st.session_state.home_focus = "practice"; set_stage(1); st.rerun()
-    if st.button("🎯 复习", use_container_width=True): set_stage(18); st.rerun()
+    if st.button("📖 学习", use_container_width=True): set_stage(1); st.rerun()
+    if st.button("🧠 知识", use_container_width=True): open_knowledge(); st.rerun()
+    if st.button("✍️ 练习", use_container_width=True): set_stage(21); st.rerun()
+    if st.button("🧰 实训", use_container_width=True): set_stage(22); st.rerun()
     if st.button("📊 我的学习", use_container_width=True): set_stage(5); st.rerun()
     st.divider()
     st.caption(f"当前实验 · {knowledge.experiment['name']}")
@@ -438,44 +489,11 @@ if stage == 1:
                  key=f"course_exam_{selected_course_id}", use_container_width=True):
         start_course_exam(selected_course_id); st.rerun()
     st.divider()
-    st.markdown('<div class="dzt-section-label">Simulation lab</div>', unsafe_allow_html=True)
-    st.subheader("选择一个学习实验")
-    st.caption("选好实验和练习方式，下一步完成安全确认后即可开始。")
-    experiment_options = list(catalog)
-    card_columns = st.columns(len(experiment_options))
-    for column, experiment_id in zip(card_columns, experiment_options):
-        experiment_knowledge = KnowledgeBase(experiment_id)
-        experiment = catalog[experiment_id]
-        symptoms = "、".join(experiment_knowledge.symptoms.values())
-        with column:
-            st.markdown(f'<div class="dzt-card"><h3>{experiment["name"]}</h3><p><b>{len(experiment_knowledge.scenario_ids)} 类</b>模拟故障</p><p>{experiment["scope"]}</p><p><small>现象：{symptoms}</small></p></div>', unsafe_allow_html=True)
-    if st.button("🎯 开始跨实验综合训练", use_container_width=True, help="系统随机选择一个实验和故障，完成安全确认后进入排查。"):
-        start_comprehensive_training(); st.rerun()
-    chosen_experiment_id = st.radio("实验", experiment_options, index=experiment_options.index(knowledge.experiment_id), format_func=lambda item: catalog[item]["name"], horizontal=True, label_visibility="collapsed")
-    mode_options = ["随机故障练习", "引导学习模式", "自由诊断演示"]
-    saved_mode = st.session_state.get("practice_mode", "随机故障练习")
-    mode = st.segmented_control("学习方式", mode_options, default=saved_mode if saved_mode in mode_options else mode_options[0], help="随机练习自动评分；引导模式先讲解再判断且不计分；自由诊断用于探索规则。") or "随机故障练习"
-    chosen_knowledge = KnowledgeBase(chosen_experiment_id)
-    selected_symptom_id = chosen_knowledge.default_symptom_id
-    if mode == "自由诊断演示":
-        symptom_ids = list(chosen_knowledge.symptoms)
-        selected_symptom_id = st.radio("选择模拟故障现象", symptom_ids, format_func=lambda item: chosen_knowledge.symptoms[item])
-    elif mode == "随机故障练习":
-        st.info("系统会随机生成故障和对应现象；完成后显示评分与推荐排查顺序。")
-    else:
-        st.info("每一步会先解释元件作用，再提供模拟资料供你判断；本模式不计分，但完成后会计入今日学习任务。")
-    with st.expander("使用范围与隐私说明"):
-        st.write("应用只读取网页内的模拟资料，不连接设备，也不提供真实带电操作指导。")
-        st.write("应用不要求姓名、邮箱或账号；练习记录只包含实验、结果、得分和时间。")
-        if config.storage_is_temporary or not repository.persistent:
-            st.write("当前云端成绩为临时数据，服务休眠、重启或更新后可能丢失。")
-    st.warning(DISCLAIMER)
-    if st.button("继续安全确认", type="primary", use_container_width=True):
-        st.session_state.selected_experiment_id = chosen_experiment_id
-        st.session_state.practice_mode = mode
-        st.session_state.selected_symptom_id = selected_symptom_id
-        st.session_state.pop("diagnostic_state", None)
-        set_stage(2); st.rerun()
+    st.markdown('<div class="dzt-section-label">More ways to learn</div>', unsafe_allow_html=True)
+    next_columns = st.columns(3)
+    if next_columns[0].button("📚 按教材学习", use_container_width=True): set_stage(20); st.rerun()
+    if next_columns[1].button("✍️ 进入练习中心", use_container_width=True): set_stage(21); st.rerun()
+    if next_columns[2].button("🧰 进入虚拟实训", use_container_width=True): set_stage(22); st.rerun()
 
 elif stage == 2:
     st.markdown('<div class="dzt-section-label">Simulation setup</div>', unsafe_allow_html=True)
@@ -1645,3 +1663,93 @@ elif stage == 19:
                 st.session_state.selected_course_id = task["course_id"]
                 st.session_state.pop("capstone_report_ready", None)
                 st.session_state.pop("capstone_state", None); set_stage(1); st.rerun()
+
+elif stage == 20:
+    st.markdown('<div class="dzt-section-label">Textbook learning</div>', unsafe_allow_html=True)
+    st.subheader("📚 按教材学习")
+    st.write("选择教材路线和章节，平台会调用统一知识点、原创练习与虚拟实训。")
+    st.info("教材只用于章节映射；平台不提供教材正文、扫描图片或课后题答案。")
+    book_ids = list(BOOK_EDITION_MAPPINGS)
+    selected_book_id = st.selectbox(
+        "教材与版本", book_ids,
+        format_func=lambda item: f"{BOOK_EDITION_MAPPINGS[item]['title']} · {BOOK_EDITION_MAPPINGS[item]['edition']}",
+    )
+    book = BOOK_EDITION_MAPPINGS[selected_book_id]
+    st.caption(f"内容提供：{book['publisher']} · {book['notice']}")
+    chapter_index = st.selectbox(
+        "选择章节", range(len(book["chapters"])),
+        format_func=lambda item: f"第{item + 1}单元 · {book['chapters'][item]['title']}",
+    )
+    topics = topics_for_book_chapter(selected_book_id, chapter_index)
+    st.markdown("### 本单元知识点")
+    topic_columns = st.columns(2)
+    for index, topic in enumerate(topics):
+        with topic_columns[index % 2]:
+            st.markdown(
+                f'<div class="dzt-card"><h3>{topic["title"]}</h3>'
+                f'<p>{topic["summary"]}</p></div>', unsafe_allow_html=True,
+            )
+            if st.button("学习这个知识点", key=f"book_topic_{topic['id']}", use_container_width=True):
+                open_knowledge(topic["id"]); st.rerun()
+    st.warning("当前为通用教材路线，不代表任何出版社官方版本。后续可按书名、版次和ISBN增加映射。")
+    if st.button("返回学习首页", use_container_width=True): set_stage(1); st.rerun()
+
+elif stage == 21:
+    st.markdown('<div class="dzt-section-label">Practice center</div>', unsafe_allow_html=True)
+    st.subheader("✍️ 练习中心")
+    st.write("按章节练习、课程综合评测或复习历史薄弱点。")
+    practice_cards = st.columns(2)
+    with practice_cards[0]:
+        st.markdown('<div class="dzt-card"><h3>10分钟复习</h3><p>根据错题、识图错误和故障练习自动生成。</p></div>', unsafe_allow_html=True)
+        if st.button("打开复习清单", type="primary", use_container_width=True): set_stage(18); st.rerun()
+    with practice_cards[1]:
+        wrong_count = len(repository.wrong_question_ids())
+        st.markdown(f'<div class="dzt-card"><h3>错题复习</h3><p>当前记录到 {wrong_count} 道待巩固错题。</p></div>', unsafe_allow_html=True)
+        if st.button("开始错题复习", disabled=wrong_count == 0, use_container_width=True):
+            target = next(item for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"]))
+            start_chapter_quiz(target["id"], True); st.rerun()
+    unlocked_courses = [course for course in COURSES if course_is_unlocked(repository, course["id"])]
+    selected_practice_course = st.selectbox(
+        "选择课程", [course["id"] for course in unlocked_courses],
+        format_func=lambda item: next(course["title"] for course in unlocked_courses if course["id"] == item),
+    )
+    practice_chapters = COURSE_CHAPTERS[selected_practice_course]
+    selected_practice_chapter = st.selectbox(
+        "选择章节", [chapter["id"] for chapter in practice_chapters],
+        format_func=lambda item: chapter_by_id(item)["title"],
+    )
+    if st.button("开始5题章节练习", type="primary", use_container_width=True):
+        start_chapter_quiz(selected_practice_chapter); st.rerun()
+    eligible = course_exam_eligible(repository, selected_practice_course)
+    if st.button("开始10题课程综合评测", disabled=not eligible, use_container_width=True):
+        start_course_exam(selected_practice_course); st.rerun()
+    if not eligible:
+        st.caption("通过该课程全部章节测验后开放综合评测。")
+
+elif stage == 22:
+    st.markdown('<div class="dzt-section-label">Virtual laboratory</div>', unsafe_allow_html=True)
+    st.subheader("🧰 虚拟实训中心")
+    st.write("通过过程演示、互动识图、课程综合实训和故障诊断理解电气控制逻辑。")
+    training_columns = st.columns(3)
+    training_columns[0].metric("互动识图", f"{len(DIAGRAM_CASES)} 个案例")
+    training_columns[1].metric("课程综合实训", f"{len(CAPSTONE_TASKS)} 项")
+    training_columns[2].metric("故障模拟", f"{sum(len(KnowledgeBase(item).scenario_ids) for item in catalog)} 类")
+    st.markdown("### 学习型实训")
+    st.caption("建议先在课程章节中学习知识卡，再完成识图和综合实训。")
+    training_course_ids = [course["id"] for course in COURSES if course_is_unlocked(repository, course["id"])]
+    training_course_id = st.selectbox(
+        "选择课程实训", training_course_ids,
+        format_func=lambda item: next(course["title"] for course in COURSES if course["id"] == item),
+    )
+    training_chapters = COURSE_CHAPTERS[training_course_id]
+    available_cases = [case for chapter in training_chapters for case in cases_for_chapter(chapter["id"])]
+    if available_cases:
+        case_id = st.selectbox("互动识图案例", [case["id"] for case in available_cases], format_func=lambda item: DIAGRAM_CASES[item]["title"])
+        if st.button("开始互动识图", type="primary", use_container_width=True): start_diagram_training(case_id); st.rerun()
+    capstone = task_for_course(training_course_id)
+    if st.button(f"开始综合实训 · {capstone['title']}", disabled=not task_is_unlocked(repository, training_course_id), use_container_width=True):
+        start_capstone(training_course_id); st.rerun()
+    st.divider()
+    st.markdown("### 故障诊断模拟")
+    st.caption("诊断功能是虚拟实训的一部分，不是平台的主学习入口。")
+    render_experiment_selector()
