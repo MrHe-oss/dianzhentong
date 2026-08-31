@@ -20,7 +20,7 @@ from dianzhentong.assessment import (
 from dianzhentong.quick_experience import (
     EXPERIENCE_ITEMS, QuickExperienceSession, experience_report,
 )
-from dianzhentong.review_plan import build_review_plan
+from dianzhentong.review_plan import build_review_plan, review_overview
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
@@ -80,8 +80,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.3"
-STORAGE_CACHE_VERSION = "2.3-review-plan-v1"
+UI_STATE_VERSION = "2.4"
+STORAGE_CACHE_VERSION = "2.4-review-mastery-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -592,13 +592,16 @@ elif stage == 4:
                 st.write(f"- {question}")
         report = build_report(session, include_score=scored_practice)
         st.download_button("下载文本学习报告", data=report.encode("utf-8"), file_name="电诊通_教学诊断报告.txt", mime="text/plain", use_container_width=True)
+        if st.session_state.get("review_origin") and scored_practice:
+            if st.button("返回复习清单", type="primary", use_container_width=True):
+                st.session_state.pop("review_origin", None); set_stage(18); st.rerun()
         if scored_practice:
             if st.button("练习薄弱项", type="primary", use_container_width=True):
                 start_weak_practice(); st.rerun()
             if st.button("再来一题", use_container_width=True):
                 start_random_practice(); st.rerun()
         if st.button("返回实验首页", use_container_width=True):
-            st.session_state.pop("diagnostic_state", None); set_stage(1); st.rerun()
+            st.session_state.pop("diagnostic_state", None); st.session_state.pop("review_origin", None); set_stage(1); st.rerun()
         st.warning(DISCLAIMER)
 
 elif stage == 5:
@@ -624,6 +627,14 @@ elif stage == 5:
     top_metrics[0].metric("连续学习", f"{overview['streak']} 天")
     top_metrics[1].metric("今日任务", f"{tasks['completed_count']} / 3")
     st.progress(tasks["completion"], text="今日任务完成度")
+    mastery_overview = review_overview(repository)
+    mastery_metrics = st.columns(3)
+    mastery_metrics[0].metric("待复习", len(mastery_overview["pending"]))
+    mastery_metrics[1].metric("已消除薄弱点", len(mastery_overview["mastered"]))
+    mastery_metrics[2].metric("最近7天掌握", mastery_overview["recently_mastered"])
+    kind_names = {"quiz":"错题", "diagram":"识图", "fault":"故障"}
+    mastery_rows = [{"类型":name, "待复习":sum(item.kind == kind for item in mastery_overview["pending"]), "已掌握":sum(item.kind == kind for item in mastery_overview["mastered"])} for kind,name in kind_names.items()]
+    render_markdown_table(["类型", "待复习", "已掌握"], mastery_rows)
     if st.button("打开个性化复习清单", type="primary", use_container_width=True):
         set_stage(18); st.rerun()
     last_chapter_id = st.session_state.get("last_learning_chapter_id")
@@ -1002,7 +1013,7 @@ elif stage == 10:
                     st.session_state.quiz_state = quiz
                 st.rerun()
         if st.button("退出测验", use_container_width=True):
-            st.session_state.pop("quiz_state", None); set_stage(8); st.rerun()
+            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
 
 elif stage == 11:
     quiz = st.session_state.get("quiz_state", {})
@@ -1043,11 +1054,15 @@ elif stage == 11:
         st.warning("测验仅用于电气知识学习，不得据此进行真实带电测量、拆线或送电操作。")
         if wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"], True); st.rerun()
+        if st.session_state.get("review_origin"):
+            if st.button("返回复习清单", type="primary", use_container_width=True):
+                st.session_state.pop("review_origin", None); st.session_state.pop("quiz_state", None)
+                set_stage(18); st.rerun()
         if st.button("再测一次", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"]); st.rerun()
         if st.button("返回本章", use_container_width=True):
             st.session_state.selected_chapter_id = quiz["chapter_id"]
-            st.session_state.pop("quiz_state", None); set_stage(8); st.rerun()
+            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
 
 elif stage == 12:
     st.subheader("💾 学习档案导出与恢复")
@@ -1155,13 +1170,17 @@ elif stage == 13:
             st.markdown("### 对应知识卡")
             st.write("、".join(KNOWLEDGE_CARDS[item]["title"] for item in case["card_ids"]))
             render_provenance(provenance_for_diagram(case["card_ids"]), "本案例参考资料")
+            if st.session_state.get("review_origin"):
+                if st.button("返回复习清单", type="primary", use_container_width=True):
+                    st.session_state.pop("review_origin", None); st.session_state.pop("diagram_training", None)
+                    set_stage(18); st.rerun()
             chapter_cases = cases_for_chapter(case["chapter_id"])
             next_case = next((item for item in chapter_cases if item["id"] != training.case_id), chapter_cases[0])
             if st.button("再练一个案例", type="primary", use_container_width=True):
                 start_diagram_training(next_case["id"]); st.rerun()
             if st.button("返回本章", use_container_width=True):
                 st.session_state.selected_chapter_id = case["chapter_id"]
-                st.session_state.pop("diagram_training", None); set_stage(8); st.rerun()
+                st.session_state.pop("diagram_training", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
 
 elif stage == 14:
     exam = st.session_state.get("course_exam_state", {})
@@ -1343,9 +1362,13 @@ elif stage == 17:
 elif stage == 18:
     st.subheader("🎯 我的10分钟复习清单")
     st.caption("根据当前设备上的错题、识图错误和模拟故障成绩即时生成；不上传数据，也不额外计分。")
+    mastery = review_overview(repository)
     review_tasks = build_review_plan(repository)
     total_minutes = sum(item.minutes for item in review_tasks)
-    st.info(f"今天建议完成 {len(review_tasks)} 项，预计 {total_minutes} 分钟。完成后重新打开本页，清单会按最新记录更新。")
+    if mastery["pending"]:
+        st.info(f"今天建议完成 {len(review_tasks)} 项，预计 {total_minutes} 分钟。完成后返回本页，清单会按最新记录更新。")
+    else:
+        st.success("当前复习任务已完成。下面提供一项自由巩固建议，不代表存在新的薄弱点。")
     for index, item in enumerate(review_tasks, 1):
         st.markdown(f'<div class="dzt-card"><h3>{index}. {item.title} · {item.minutes}分钟</h3><p>{item.reason}</p></div>', unsafe_allow_html=True)
         if item.kind == "knowledge":
@@ -1354,13 +1377,21 @@ elif stage == 18:
                 open_knowledge(item.reference_id); st.rerun()
         elif item.kind == "quiz":
             if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                st.session_state.review_origin = True
                 start_similar_quiz(item.reference_id); st.rerun()
         elif item.kind == "diagram":
             if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                st.session_state.review_origin = True
                 start_diagram_training(item.reference_id); st.rerun()
         elif item.kind == "fault":
             if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
+                st.session_state.review_origin = True
                 start_targeted_practice(item.experiment_id, item.reference_id); st.rerun()
+    if mastery["statuses"]:
+        st.markdown("### 薄弱项状态")
+        kind_names = {"quiz":"错题", "diagram":"识图", "fault":"故障"}
+        status_rows = [{"类型":kind_names[item.kind], "状态":"已掌握" if item.mastered else "待复习", "连续正确":f"{item.consecutive_correct}/2", "历史错误":item.error_count} for item in mastery["statuses"]]
+        render_markdown_table(["类型", "状态", "连续正确", "历史错误"], status_rows)
     st.warning("复习任务仅使用教学模拟记录生成，不代表真实设备能力评估或检修建议。")
     if st.button("返回学习中心", use_container_width=True):
         set_stage(5); st.rerun()

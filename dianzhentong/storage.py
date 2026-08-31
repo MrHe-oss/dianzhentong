@@ -419,6 +419,16 @@ class PracticeRepository:
             ).fetchall()
         return [row["question_id"] for row in rows]
 
+    def question_answer_history(self, question_id: str) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT s.completed_at, a.is_correct FROM quiz_answers a
+                JOIN quiz_sessions s ON s.quiz_id = a.quiz_id
+                WHERE a.question_id = ? ORDER BY s.completed_at, s.rowid, a.rowid""",
+                (question_id,),
+            ).fetchall()
+        return [{"completed_at": row["completed_at"], "is_correct": bool(row["is_correct"])} for row in rows]
+
     def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         history = self.quiz_history(chapter_id, 100)
         attempts = len(history)
@@ -468,6 +478,11 @@ class PracticeRepository:
         return {"attempts": len(records), "completed_cases": completed_cases,
                 "correct_steps": correct, "total_steps": total,
                 "accuracy": correct / total if total else None, "weakest_step": weakest}
+
+    def diagram_step_history(self, case_id: str, step_id: str) -> list[dict[str, Any]]:
+        records = reversed(self.diagram_history(limit=1000))
+        return [{"completed_at": item["completed_at"], "is_correct": step_id not in item["wrong_steps"]}
+                for item in records if item["case_id"] == case_id]
 
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         """导出匿名原始学习记录；不包含路径、账号或设备信息。"""
@@ -650,6 +665,14 @@ class MemoryPracticeRepository:
                     counts[answer.question_id] = counts.get(answer.question_id, 0) + 1
         return sorted(counts, key=lambda item: (-counts[item], item))
 
+    def question_answer_history(self, question_id: str) -> list[dict[str, Any]]:
+        result = []
+        for record in sorted(self.quiz_records.values(), key=lambda item: item.completed_at):
+            for answer in record.answers:
+                if answer.question_id == question_id:
+                    result.append({"completed_at": record.completed_at, "is_correct": answer.is_correct})
+        return result
+
     def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         history = self.quiz_history(chapter_id, 100)
         attempts = len(history); passed = sum(item["passed"] for item in history)
@@ -685,6 +708,11 @@ class MemoryPracticeRepository:
         return {"attempts": len(records), "completed_cases": len({item["case_id"] for item in records}),
                 "correct_steps": correct, "total_steps": total,
                 "accuracy": correct / total if total else None, "weakest_step": weakest}
+
+    def diagram_step_history(self, case_id: str, step_id: str) -> list[dict[str, Any]]:
+        records = reversed(self.diagram_history(limit=1000))
+        return [{"completed_at": item["completed_at"], "is_correct": step_id not in item["wrong_steps"]}
+                for item in records if item["case_id"] == case_id]
 
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         practices = []
@@ -780,6 +808,9 @@ class ResilientPracticeRepository:
     def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
         return self._call("wrong_question_ids", chapter_id)
 
+    def question_answer_history(self, question_id: str) -> list[dict[str, Any]]:
+        return self._call("question_answer_history", question_id)
+
     def quiz_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         return self._call("quiz_summary", chapter_id)
 
@@ -791,6 +822,9 @@ class ResilientPracticeRepository:
 
     def diagram_summary(self, chapter_id: str | None = None) -> dict[str, Any]:
         return self._call("diagram_summary", chapter_id)
+
+    def diagram_step_history(self, case_id: str, step_id: str) -> list[dict[str, Any]]:
+        return self._call("diagram_step_history", case_id, step_id)
 
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         return self._call("export_snapshot")
