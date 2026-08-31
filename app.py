@@ -13,6 +13,10 @@ from dianzhentong.backup import (
     parse_archive,
     preview_archive,
 )
+from dianzhentong.assessment import (
+    competency_report, course_exam_eligible, course_learning_status,
+    review_route, select_course_questions,
+)
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
@@ -68,8 +72,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "1.9"
-STORAGE_CACHE_VERSION = "1.9-interactive-diagram-v1"
+UI_STATE_VERSION = "2.0"
+STORAGE_CACHE_VERSION = "2.0-course-assessment-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -171,6 +175,14 @@ def start_diagram_training(case_id: str) -> None:
     st.session_state.last_learning_chapter_id = DIAGRAM_CASES[case_id]["chapter_id"]
     set_stage(13)
 
+def start_course_exam(course_id: str) -> None:
+    selected = select_course_questions(course_id, 10)
+    st.session_state.course_exam_state = {
+        "course_id": course_id, "question_ids": [item.id for item in selected],
+        "index": 0, "answers": [],
+    }
+    set_stage(14)
+
 def start_comprehensive_training() -> None:
     experiment_id = secrets.choice(list(catalog))
     prepare_task(experiment_id, "综合训练")
@@ -203,7 +215,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -299,6 +311,16 @@ if stage == 1:
                 st.session_state.selected_chapter_id = chapter["id"]
                 st.session_state.last_learning_chapter_id = chapter["id"]
                 set_stage(8); st.rerun()
+    st.markdown("### 课程综合评测")
+    exam_summary = repository.quiz_summary(selected_course_id)
+    eligible = course_exam_eligible(repository, selected_course_id)
+    if exam_summary["attempts"]:
+        st.write(f"已评测 {exam_summary['attempts']} 次 · 最好成绩 {exam_summary['best_score']:.0%} · {'已完成' if exam_summary['passed_count'] else '待提高'}")
+    elif not eligible:
+        st.caption("通过本课程全部章节测验后开放；每次10题，达到70%完成课程评测。")
+    if st.button("开始课程综合评测", type="primary", disabled=not eligible,
+                 key=f"course_exam_{selected_course_id}", use_container_width=True):
+        start_course_exam(selected_course_id); st.rerun()
     st.divider()
     current_progress = progress_map()
     overview = learning_overview(repository, current_progress)
@@ -569,7 +591,8 @@ elif stage == 5:
     st.subheader("课程完成情况")
     for course in COURSES:
         unlocked = course_is_unlocked(repository, course["id"])
-        st.markdown(f"**{course['title']}** · {'已解锁' if unlocked else '待解锁'}")
+        learning_status = course_learning_status(repository, course["id"])
+        st.markdown(f"**{course['title']}** · {'已解锁' if unlocked else '待解锁'} · {learning_status}")
         chapter_rows = []
         for chapter in COURSE_CHAPTERS[course["id"]]:
             item = chapter_progress(repository, chapter)
@@ -579,8 +602,11 @@ elif stage == 5:
                 "状态": item.status, "推荐下一步": recommended_chapter_action(repository, chapter),
             })
         render_markdown_table(["章节", "完成度", "测验", "状态", "推荐下一步"], chapter_rows)
+        exam = repository.quiz_summary(course["id"])
+        if course_exam_eligible(repository, course["id"]):
+            st.caption(f"综合评测：{exam['attempts']} 次 · 最好成绩 {exam['best_score']:.0%}" if exam["attempts"] else "综合评测已开放，尚未作答。")
     quiz_overview = repository.quiz_summary()
-    st.subheader("章节测验")
+    st.subheader("章节测验与课程评测")
     quiz_metrics = st.columns(2)
     quiz_metrics[0].metric("测验次数", quiz_overview["attempts"])
     quiz_accuracy = quiz_overview["question_accuracy"]
@@ -589,7 +615,8 @@ elif stage == 5:
     if wrong_ids:
         st.caption(f"目前有 {len(wrong_ids)} 个知识点题目需要复习，复习模式会优先抽取。")
         if st.button("开始错题优先复习", type="primary", use_container_width=True):
-            target_chapter = next(item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"]))
+            target_chapter = next((item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"])),
+                                  QUESTION_MAP[wrong_ids[0]].chapter_id)
             start_chapter_quiz(target_chapter, True); st.rerun()
     else:
         st.caption("完成章节测验后，这里会显示错题复习入口。")
@@ -1089,3 +1116,89 @@ elif stage == 13:
             if st.button("返回本章", use_container_width=True):
                 st.session_state.selected_chapter_id = case["chapter_id"]
                 st.session_state.pop("diagram_training", None); set_stage(8); st.rerun()
+
+elif stage == 14:
+    exam = st.session_state.get("course_exam_state", {})
+    course_id = exam.get("course_id")
+    if course_id not in COURSE_CHAPTERS or not exam.get("question_ids"):
+        st.warning("课程评测状态已失效，请重新开始。")
+        if st.button("返回课程地图", use_container_width=True): set_stage(1); st.rerun()
+    else:
+        course = next(item for item in COURSES if item["id"] == course_id)
+        index = min(int(exam["index"]), len(exam["question_ids"]) - 1)
+        question = QUESTION_MAP[exam["question_ids"][index]]
+        st.subheader(f"📝 {course['title']} · 综合评测")
+        st.progress((index + 1) / len(exam["question_ids"]), text=f"第 {index + 1} / {len(exam['question_ids'])} 题")
+        st.markdown(f"### {question.stem}")
+        selected = st.radio("请选择一个答案", [*question.options, "不确定"], index=None,
+                            key=f"course_exam_choice_{course_id}_{question.id}_{index}")
+        if st.button("提交并进入下一题" if index < len(exam["question_ids"]) - 1 else "提交并查看报告",
+                     type="primary", disabled=selected is None, use_container_width=True):
+            answer = QuizAnswer(question.id, selected, question.answer,
+                                selected == question.answer, selected == "不确定")
+            exam["answers"].append({
+                "question_id":answer.question_id, "selected_answer":answer.selected_answer,
+                "correct_answer":answer.correct_answer, "is_correct":answer.is_correct,
+                "uncertain":answer.uncertain,
+            })
+            if index == len(exam["question_ids"]) - 1:
+                answers = tuple(QuizAnswer(**item) for item in exam["answers"])
+                record = make_quiz_record(course_id, answers, mode="course_exam")
+                repository.save_quiz(record)
+                exam["record"] = {"quiz_id":record.quiz_id, "correct_count":record.correct_count,
+                                  "total_count":record.total_count, "passed":record.passed}
+                st.session_state.course_exam_state = exam; set_stage(15)
+            else:
+                exam["index"] = index + 1; st.session_state.course_exam_state = exam
+            st.rerun()
+        st.caption("答题过程中不显示答案，完成后统一生成能力报告。仅限教学学习。")
+        if st.button("退出本次评测", use_container_width=True):
+            st.session_state.pop("course_exam_state", None); set_stage(1); st.rerun()
+
+elif stage == 15:
+    exam = st.session_state.get("course_exam_state", {})
+    result = exam.get("record")
+    course_id = exam.get("course_id")
+    if not result or course_id not in COURSE_CHAPTERS:
+        st.warning("没有可显示的课程评测报告。")
+        if st.button("返回课程地图", use_container_width=True): set_stage(1); st.rerun()
+    else:
+        course = next(item for item in COURSES if item["id"] == course_id)
+        answers = tuple(QuizAnswer(**item) for item in exam["answers"])
+        score = result["correct_count"] / result["total_count"]
+        st.subheader("📋 课程综合评测报告")
+        st.markdown(f"### {course['title']}")
+        st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
+        if result["passed"]: st.success("达到70%课程评测标准，本课程状态更新为“已完成”。")
+        else: st.warning("尚未达到70%，请按下方路线复习后再次评测。")
+        history = repository.quiz_history(course_id, 20)
+        best = max(item["correct_count"] / item["total_count"] for item in history)
+        st.write(f"评测次数：{len(history)} · 最好成绩：{best:.0%}")
+        if len(history) >= 2:
+            previous = history[1]["correct_count"] / history[1]["total_count"]
+            st.write(f"相比上一次：{score - previous:+.0%}")
+        st.markdown("### 能力掌握情况")
+        ability_rows = [{"能力维度":item["name"], "得分":f"{item['correct']}/{item['total']}",
+                         "正确率":f"{item['accuracy']:.0%}"} for item in competency_report(answers)]
+        render_markdown_table(["能力维度", "得分", "正确率"], ability_rows)
+        route = review_route(answers)
+        st.markdown("### 推荐复习路线")
+        if route:
+            for index, item in enumerate(route, 1):
+                chapter = chapter_by_id(item["chapter_id"])
+                st.write(f"{index}. **{chapter['title']}**：{item['reason']}")
+                if st.button(f"复习第{index}项", key=f"exam_review_{item['chapter_id']}", use_container_width=True):
+                    st.session_state.selected_course_id = course_id
+                    st.session_state.selected_chapter_id = item["chapter_id"]
+                    st.session_state.last_learning_chapter_id = item["chapter_id"]
+                    set_stage(8); st.rerun()
+        else: st.success("本次没有错题，可继续下一门课程或进行巩固练习。")
+        report_lines = ["电诊通｜课程学习总结", course["title"],
+                        f"本次成绩：{result['correct_count']}/{result['total_count']}（{score:.0%}）",
+                        "能力情况：", *[f"- {item['name']}：{item['accuracy']:.0%}" for item in competency_report(answers)],
+                        "", "仅用于教学学习，不是职业资格、实训考核或能力认证证书。"]
+        st.download_button("下载课程学习总结", data="\n".join(report_lines).encode("utf-8"),
+                           file_name="电诊通_课程学习总结.txt", mime="text/plain", use_container_width=True)
+        if st.button("重新评测", type="primary", use_container_width=True): start_course_exam(course_id); st.rerun()
+        if st.button("返回课程地图", use_container_width=True):
+            st.session_state.pop("course_exam_state", None); set_stage(1); st.rerun()

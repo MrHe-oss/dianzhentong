@@ -104,6 +104,11 @@ QUESTIONS = (
     _q(53,"control_path_tracing","完整教学证据链应包含？",("对象、预期、模拟证据与判断","只有最终结论","真实送电结果"),"对象、预期、模拟证据与判断","逐步记录才能让路径和结论可复盘。","证据链"),
     _q(54,"control_path_tracing","模拟证据不足时应如何处理？",("保留不确定并复核资料","强行确定故障","拆开真实设备"),"保留不确定并复核资料","证据不足不能形成确定结论，更不能扩大到真实操作。","证据意识"),
     _q(55,"control_path_tracing","路径追踪为什么先公共后局部？",("减少无关检查并缩小范围","为了跳过安全确认","为了替代专业规程"),"减少无关检查并缩小范围","先排除共享条件，再按现象进入局部分支可形成清晰逻辑链。","排查顺序"),
+    _q(56,"jog_continuous_basics","点动正常而连续运行不能启动，公共条件最可能处于什么状态？",("可能正常，应检查连续支路","必然异常","无法使用模拟资料判断"),"可能正常，应检查连续支路","点动正常说明共享公共条件具备，应进入连续运行相关支路。","现象分支"),
+    _q(57,"jog_continuous_basics","区分点动与连续运行的关键依据是？",("按钮释放后是否保持","电动机外壳颜色","真实导线长度"),"按钮释放后是否保持","连续运行具有保持逻辑，点动通常随按钮释放结束。","运行特征"),
+    _q(58,"jog_continuous_training","连续启动请求和自锁保持条件在抽象逻辑中常构成？",("可选的并联路径","完全无关的回路","真实跨接点"),"可选的并联路径","启动请求建立初始条件，保持分支在之后维持条件。","保持分支"),
+    _q(59,"jog_continuous_training","点动异常、连续运行正常时，应优先关注？",("点动请求支路","公共停止条件","接触器线圈必然断路"),"点动请求支路","连续运行正常已说明共享条件和执行元件能够形成逻辑。","局部分支"),
+    _q(60,"jog_continuous_training","模拟资料与预期状态矛盾时应如何处理？",("记录不一致并重新检查模拟资料","强行选择正常","进行真实拆线"),"记录不一致并重新检查模拟资料","教学判断也必须保持证据一致，不能猜测或扩大到真实操作。","证据意识"),
 )
 
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
@@ -120,6 +125,8 @@ QUESTION_CARD_MAP = {
     "q28": "contactor_coil", "q29": "forward_reverse", "q30": "electrical_interlock",
     **{f"q{number:02d}": "jog_control" for number in (31, 32, 33, 34, 35, 38, 39)},
     "q36": "self_hold", "q37": "self_hold", "q40": "self_hold",
+    "q56": "jog_control", "q57": "jog_control", "q58": "self_hold",
+    "q59": "jog_control", "q60": "logic_tracing",
     **{f"q{number:02d}": "diagram_symbols" for number in range(41, 46)},
     **{f"q{number:02d}": "series_logic" for number in (46, 48, 50)},
     **{f"q{number:02d}": "parallel_logic" for number in (47, 49)},
@@ -171,15 +178,17 @@ def select_questions(chapter_id: str, count: int = 5, wrong_ids: Sequence[str] =
 
 
 def make_quiz_record(chapter_id: str, answers: Sequence[QuizAnswer], mode: str = "chapter_quiz",
-                     quiz_id: str | None = None, completed_at: datetime | None = None) -> QuizRecord:
+                     quiz_id: str | None = None, completed_at: datetime | None = None,
+                     pass_threshold: float | None = None) -> QuizRecord:
     frozen = tuple(answers)
     correct = sum(item.is_correct for item in frozen)
     total = len(frozen)
+    threshold = 0.7 if mode == "course_exam" else (pass_threshold if pass_threshold is not None else 0.6)
     return QuizRecord(
         quiz_id=quiz_id or secrets.token_hex(12), chapter_id=chapter_id,
         completed_at=(completed_at or beijing_now()).isoformat(timespec="seconds"),
         correct_count=correct, total_count=total,
-        passed=bool(total and correct / total >= 0.6), mode=mode, answers=frozen,
+        passed=bool(total and correct / total >= threshold), mode=mode, answers=frozen,
     )
 
 

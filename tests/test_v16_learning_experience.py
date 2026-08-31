@@ -19,7 +19,7 @@ def solve(knowledge: KnowledgeBase, scenario_id: str) -> DiagnosticSession:
 
 
 def test_every_question_has_unique_options_answer_explanation_and_card():
-    assert len(QUESTIONS) == 55
+    assert len(QUESTIONS) == 60
     for question in QUESTIONS:
         assert len(question.options) == len(set(question.options))
         assert question.answer in question.options

@@ -115,6 +115,7 @@ def validate_archive(archive: Any) -> dict[str, Any]:
 
     catalog = KnowledgeBase.catalog()
     chapters = {item["id"] for item in ALL_CHAPTERS}
+    course_chapter_ids = {course["id"]: {item["id"] for item in COURSE_CHAPTERS[course["id"]]} for course in COURSES}
     for item in data["practice_records"]:
         required = {"practice_id", "completed_at", "experiment_id", "scenario_id", "result_id", "matched", "correct_judgments", "total_judgments", "wrong_nodes", "uncertain_count"}
         if not isinstance(item, dict) or set(item) != required:
@@ -156,8 +157,11 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         required = {"quiz_id", "chapter_id", "completed_at", "correct_count", "total_count", "passed", "mode", "answers"}
         if not isinstance(item, dict) or set(item) != required:
             raise BackupValidationError("测验记录字段不完整")
-        if item["chapter_id"] not in chapters:
+        record_scope = item["chapter_id"]
+        if record_scope not in chapters | set(course_chapter_ids):
             raise BackupValidationError("测验包含未知章节")
+        if item["mode"] == "course_exam" and record_scope not in course_chapter_ids:
+            raise BackupValidationError("课程综合评测范围无效")
         _text(item["quiz_id"], "测验ID"); _iso(item["completed_at"], "测验时间")
         correct = _integer(item["correct_count"], "测验正确数")
         total = _integer(item["total_count"], "测验题数")
@@ -173,7 +177,9 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             if not isinstance(answer, dict) or set(answer) != fields:
                 raise BackupValidationError("测验答案字段不完整")
             question_id = answer["question_id"]
-            if question_id in seen or question_id not in QUESTION_MAP or QUESTION_MAP[question_id].chapter_id != item["chapter_id"]:
+            valid_question_chapters = (course_chapter_ids[record_scope] if item["mode"] == "course_exam"
+                                       else {record_scope})
+            if question_id in seen or question_id not in QUESTION_MAP or QUESTION_MAP[question_id].chapter_id not in valid_question_chapters:
                 raise BackupValidationError("测验题目无效或重复")
             seen.add(question_id)
             _text(answer["selected_answer"], "用户答案"); _text(answer["correct_answer"], "正确答案")
@@ -189,7 +195,8 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             if answer["uncertain"] != (answer["selected_answer"] == "不确定"):
                 raise BackupValidationError("不确定状态与答案不一致")
             actual_correct += int(is_correct)
-        if actual_correct != correct or passed != bool(total and correct / total >= 0.6):
+        threshold = 0.7 if item["mode"] == "course_exam" else 0.6
+        if actual_correct != correct or passed != bool(total and correct / total >= threshold):
             raise BackupValidationError("测验得分与答案不一致")
 
     for item in data["diagram_practice_records"]:
@@ -259,7 +266,10 @@ def build_learning_summary(repository: Any) -> str:
         "课程与章节", "-" * 28,
     ]
     for course in COURSES:
-        lines.append(course["title"])
+        exam = repository.quiz_summary(course["id"])
+        exam_text = (f"综合评测{exam['attempts']}次，最好{exam['best_score']:.0%}"
+                     if exam["attempts"] else "综合评测尚未完成")
+        lines.append(f"{course['title']}（{exam_text}）")
         for chapter in COURSE_CHAPTERS[course["id"]]:
             progress = chapter_progress(repository, chapter)
             lines.append(f"- {chapter['title']}：{progress.status}（{progress.completion:.0%}）")

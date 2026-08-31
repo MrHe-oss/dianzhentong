@@ -76,7 +76,7 @@ def test_second_course_unlocks_after_any_first_course_quiz_pass():
 
 
 def test_new_chapters_each_have_five_quiz_questions():
-    assert [len(questions_for_chapter(item["id"])) for item in SECOND_COURSE_CHAPTERS] == [5, 5]
+    assert [len(questions_for_chapter(item["id"])) for item in SECOND_COURSE_CHAPTERS] == [7, 8]
 
 
 def test_app_contains_comprehensive_training_and_three_experiment_ui():
