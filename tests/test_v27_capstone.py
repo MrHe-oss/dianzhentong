@@ -35,7 +35,7 @@ def solve(task_id: str, wrong_count: int = 0, reflection: str = "这次练习让
 
 
 def test_four_tasks_have_five_safe_sourced_steps():
-    assert len(CAPSTONE_TASKS) == len(COURSES) == 4
+    assert len(CAPSTONE_TASKS) == len(COURSES) == 5
     assert {task["course_id"] for task in CAPSTONE_TASKS.values()} == {item["id"] for item in COURSES}
     for task in CAPSTONE_TASKS.values():
         assert len(task["steps"]) == 5

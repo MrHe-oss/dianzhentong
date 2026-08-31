@@ -16,6 +16,8 @@ SOURCES: dict[str, dict[str, str]] = {
     "schneider_interlock": {"title":"Schneider Electric LE2GBK reversing starter FAQ","publisher":"Schneider Electric","url":"https://www.se.com/uk/en/faqs/FA139509/","type":"厂家正反转启动器技术资料","scope":"正反转启动器与机械、电气互锁的通用原理","checked_on":CHECKED_ON},
     "abb_star_delta": {"title":"ABB Star-delta starting technical guide","publisher":"ABB","url":"https://library.e.abb.com/public/6b4e1a3530814df0c12579bb0030e58b/1SFC132060M0201.pdf","type":"厂家启动技术资料","scope":"星—三角启动的目的、适用条件、接触器角色与时间转换","checked_on":CHECKED_ON},
     "schneider_star_delta": {"title":"Schneider Electric TeSys Tera star-delta operation","publisher":"Schneider Electric","url":"https://productinfo.se.com/tesys_tera_ug/tesys-tera-motor-management-system-user-guide/EN/TeSys-Tera-User%20Guide-DOCA0257-01.xml/%24/W2_TeSys_Tera_UG_StarDelta_0001013349","type":"厂家电动机控制技术说明","scope":"主、星形、三角接触器角色及星—三角操作顺序","checked_on":CHECKED_ON},
+    "abb_time_relay": {"title":"ABB Electronic timers CT-E range function diagrams","publisher":"ABB","url":"https://library.e.abb.com/public/252bc4401b9cf432c12570680034c4fd/2CDC110004C0203.pdf","type":"厂家时间继电器技术手册","scope":"通电延时、断电延时的动作时点与复位逻辑","checked_on":CHECKED_ON},
+    "schneider_time_relay": {"title":"Schneider Electric 9050JCK timer functions FAQ","publisher":"Schneider Electric","url":"https://www.se.com/us/en/faqs/FA124951/","type":"厂家时间继电器功能说明","scope":"通电延时、断电延时和输出状态变化","checked_on":CHECKED_ON},
 }
 
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
@@ -39,6 +41,10 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "star_delta_components": _item("星—三角控制包含主、星形和三角三个接触器角色。", ("abb_star_delta", "schneider_star_delta"), STATUS_VERIFIED),
     "star_delta_timing": _item("时间控制用于触发星形启动阶段向三角运行阶段转换。", ("abb_star_delta", "schneider_star_delta")),
     "star_delta_interlock": _item("星形与三角接触器角色必须通过互锁和顺序约束避免同时有效。", ("abb_star_delta", "schneider_star_delta"), STATUS_VERIFIED),
+    "timer_role": _item("时间继电器根据输入状态和时间条件改变输出状态。", ("abb_time_relay", "schneider_time_relay")),
+    "on_delay": _item("通电延时从输入形成开始计时，并在等待完成后改变输出。", ("abb_time_relay", "schneider_time_relay"), STATUS_VERIFIED),
+    "off_delay": _item("断电延时从输入撤除开始计时，输出在等待完成后退出。", ("abb_time_relay", "schneider_time_relay"), STATUS_VERIFIED),
+    "sequence_control": _item("顺序控制根据前序状态和时间条件允许后续阶段进入或退出。", ("abb_time_relay", "schneider_time_relay")),
 }
 
 RESULT_CARD_MAP = {

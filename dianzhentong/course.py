@@ -31,6 +31,12 @@ FOURTH_COURSE = {
     "description": "理解星—三角启动的适用条件、三个接触器角色、定时转换和互锁逻辑，不涉及真实接线。",
 }
 
+FIFTH_COURSE = {
+    "id": "time_relay_sequence_control",
+    "title": "时间继电器与顺序控制基础",
+    "description": "理解通电延时、断电延时、顺序启动与顺序停止的抽象逻辑，不涉及真实整定或接线。",
+}
+
 CHAPTERS = (
     {
         "id": "safety_and_circuits",
@@ -160,14 +166,46 @@ FOURTH_COURSE_CHAPTERS = (
     },
 )
 
-COURSES = (COURSE, SECOND_COURSE, THIRD_COURSE, FOURTH_COURSE)
+FIFTH_COURSE_CHAPTERS = (
+    {
+        "id": "timer_functions",
+        "title": "1. 时间继电器功能与状态",
+        "goal": "理解时间继电器把输入条件、等待阶段和输出状态组织成时序逻辑。",
+        "points": ("输入条件触发计时", "等待阶段不等于输出已形成", "时间到达后输出状态改变"),
+        "card_ids": ("timer_role",), "experiment_id": None,
+        "reflection": "为什么计时已经开始不代表后续执行条件已经形成？",
+        "next": "区分通电延时与断电延时",
+    },
+    {
+        "id": "on_off_delay",
+        "title": "2. 通电延时与断电延时",
+        "goal": "根据输入条件出现或消失的时点，区分两类基本延时功能。",
+        "points": ("通电延时：条件形成后等待", "断电延时：条件撤销后保持并等待", "不同功能不能只凭外观判断"),
+        "card_ids": ("on_delay", "off_delay"), "experiment_id": None,
+        "reflection": "通电延时和断电延时最关键的区别发生在哪个时点？",
+        "next": "学习顺序启动、停止和公共条件",
+    },
+    {
+        "id": "sequence_control",
+        "title": "3. 顺序控制逻辑",
+        "goal": "按公共条件、第一阶段、时间条件和后续阶段追踪顺序控制。",
+        "points": ("先满足公共条件", "第一阶段形成后进入等待", "条件到达后允许后续阶段", "停止顺序由题设逻辑决定"),
+        "card_ids": ("sequence_control",), "experiment_id": None,
+        "reflection": "为什么顺序控制不能理解为多个执行角色同时动作？",
+        "next": "完成互动识图和课程综合实训",
+    },
+)
+
+COURSES = (COURSE, SECOND_COURSE, THIRD_COURSE, FOURTH_COURSE, FIFTH_COURSE)
 COURSE_CHAPTERS = {
     COURSE["id"]: CHAPTERS,
     SECOND_COURSE["id"]: SECOND_COURSE_CHAPTERS,
     THIRD_COURSE["id"]: THIRD_COURSE_CHAPTERS,
     FOURTH_COURSE["id"]: FOURTH_COURSE_CHAPTERS,
+    FIFTH_COURSE["id"]: FIFTH_COURSE_CHAPTERS,
 }
-ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS + THIRD_COURSE_CHAPTERS + FOURTH_COURSE_CHAPTERS
+ALL_CHAPTERS = (CHAPTERS + SECOND_COURSE_CHAPTERS + THIRD_COURSE_CHAPTERS
+                + FOURTH_COURSE_CHAPTERS + FIFTH_COURSE_CHAPTERS)
 
 GLOSSARY = {
     "主回路": "向电动机等负载传递主要电能的回路。本平台不提供真实主回路接线指导。",
@@ -187,6 +225,10 @@ GLOSSARY = {
     "星—三角启动": "先以星形阶段降低启动影响，再转换到三角运行阶段的启动方式；本平台只讲抽象逻辑。",
     "时间控制": "在教学逻辑中用于触发星形启动阶段向三角运行阶段转换的条件。",
     "阶段互锁": "阻止星形与三角两个阶段同时形成动作条件的约束逻辑。",
+    "时间继电器": "根据输入条件和时间过程改变输出状态的控制角色；本平台不提供真实整定方法。",
+    "通电延时": "输入条件形成后开始等待，等待结束后输出状态改变的抽象时序功能。",
+    "断电延时": "输入条件撤销后开始等待，输出在等待期间暂时保持，结束后再改变状态。",
+    "顺序控制": "多个执行阶段按规定的条件先后形成，而不是简单同时动作。",
 }
 
 
@@ -223,6 +265,8 @@ def course_is_unlocked(repository: Any, course_id: str) -> bool:
         return any(repository.quiz_summary(item["id"])["passed_count"] for item in SECOND_COURSE_CHAPTERS)
     if course_id == FOURTH_COURSE["id"]:
         return bool(repository.quiz_summary(THIRD_COURSE["id"])["passed_count"])
+    if course_id == FIFTH_COURSE["id"]:
+        return bool(repository.quiz_summary(FOURTH_COURSE["id"])["passed_count"])
     return False
 
 
@@ -233,6 +277,8 @@ def course_unlock_requirement(course_id: str) -> str:
         return "通过第二门课程任意一个章节测验（达到60%）"
     if course_id == FOURTH_COURSE["id"]:
         return "完成第三门课程综合评测（达到70%）"
+    if course_id == FIFTH_COURSE["id"]:
+        return "完成第四门课程综合评测（达到70%）"
     return "已开放"
 
 

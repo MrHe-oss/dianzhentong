@@ -60,6 +60,7 @@ from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
 )
+from dianzhentong.time_sequence_learning import demos_for_chapter
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
@@ -90,7 +91,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "2.7"
+UI_STATE_VERSION = "2.8"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -944,6 +945,31 @@ elif stage == 8:
             unsafe_allow_html=True,
         )
         st.markdown(" → ".join(item["title"] for item in STAR_DELTA_STAGES))
+
+    time_demos = demos_for_chapter(chapter["id"])
+    if time_demos:
+        st.markdown("### 时间过程状态演示")
+        st.caption("点击阶段观察输入、等待和输出的先后关系。这里只表达抽象状态。")
+        demo_label = time_demos[0][0]
+        if len(time_demos) > 1:
+            demo_label = st.radio(
+                "选择延时类型", [item[0] for item in time_demos], horizontal=True,
+                key=f"time_demo_type_{chapter['id']}",
+            )
+        demo_stages = next(stages for label, stages in time_demos if label == demo_label)
+        time_stage_title = st.radio(
+            "选择过程阶段", [item["title"] for item in demo_stages], horizontal=True,
+            key=f"time_demo_stage_{chapter['id']}_{demo_label}",
+        )
+        time_stage = next(item for item in demo_stages if item["title"] == time_stage_title)
+        time_roles = "<br>".join(f"• {item}" for item in time_stage["roles"])
+        st.markdown(
+            f"<div class='dzt-stage'><strong>{time_stage['title']}</strong>"
+            f"<p>{time_stage['description']}</p><p>{time_roles}</p>"
+            f"<p><strong>下一条件：</strong>{time_stage['next_condition']}</p></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(" → ".join(item["title"] for item in demo_stages))
 
     diagram_lesson = diagram_lesson_for_chapter(chapter["id"])
     if diagram_lesson:

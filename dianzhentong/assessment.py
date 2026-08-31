@@ -19,6 +19,8 @@ CHAPTER_COMPETENCY = {
     "control_path_tracing":"diagram_reading",
     "star_delta_principles":"control_logic", "star_delta_components":"components",
     "star_delta_sequence":"diagram_reading",
+    "timer_functions":"components", "on_off_delay":"control_logic",
+    "sequence_control":"diagram_reading",
 }
 
 def course_by_id(course_id: str) -> dict[str, Any]:
