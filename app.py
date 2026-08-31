@@ -91,13 +91,20 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "2.8"
+UI_STATE_VERSION = "2.9"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
-.block-container{max-width:920px;padding-top:2rem;padding-bottom:4rem}.dzt-hero{padding:1.5rem 1.6rem;border-radius:20px;color:white;background:linear-gradient(135deg,#1d4ed8,#3b82f6);margin-bottom:1.2rem}.dzt-hero h1{margin:0;font-size:2.25rem}.dzt-hero p{margin:.45rem 0 0;opacity:.9}.dzt-card{min-height:168px;padding:1.1rem 1.2rem;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;margin-bottom:.75rem}.dzt-card h3{color:#172033;margin:0 0 .5rem;font-size:1.08rem}.dzt-card p{margin:.25rem 0;color:#475569}.dzt-step{padding:.8rem 1rem;border-left:4px solid #2563eb;border-radius:0 12px 12px 0;background:#eff6ff;margin:.5rem 0}.dzt-stage{padding:1rem 1.1rem;border:1px solid #bfdbfe;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f8fafc);margin:.65rem 0}.dzt-stage strong{color:#1d4ed8}.dzt-flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.8rem 0 1rem}.dzt-flow span{padding:.55rem .7rem;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.dzt-flow b{color:#60a5fa}div.stButton>button,div.stDownloadButton>button{border-radius:10px;min-height:2.8rem}[data-testid="stMetric"]{background:#f8fafc;border:1px solid #e2e8f0;padding:.8rem;border-radius:12px}
-@media(max-width:640px){.block-container{padding:1rem .85rem 3rem}.dzt-hero{padding:1.1rem;border-radius:15px}.dzt-hero h1{font-size:1.75rem}.dzt-card{min-height:0}[data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:.6rem}[data-testid="stHorizontalBlock"]>div{min-width:100%}}
+:root{--dzt-blue:#2563eb;--dzt-blue-dark:#1e3a8a;--dzt-ink:#172033;--dzt-muted:#64748b;--dzt-line:#e2e8f0;--dzt-surface:#fff;--dzt-soft:#f6f8fc}
+.stApp{background:linear-gradient(180deg,#f7faff 0,#fff 18rem)}
+.block-container{max-width:1040px;padding-top:1.4rem;padding-bottom:5rem}
+.dzt-hero{padding:2rem 2.1rem;border-radius:24px;color:white;background:linear-gradient(125deg,#173b8f 0%,#2563eb 62%,#60a5fa 100%);box-shadow:0 18px 45px rgba(37,99,235,.18);margin-bottom:1.25rem}.dzt-hero h1{margin:0;font-size:2.45rem;letter-spacing:-.04em}.dzt-hero p{margin:.55rem 0 0;opacity:.9;font-size:1.02rem}.dzt-brandbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 0 1rem;border-bottom:1px solid var(--dzt-line);margin-bottom:1.35rem}.dzt-brandbar strong{font-size:1.15rem;color:var(--dzt-blue-dark)}.dzt-brandbar span{font-size:.82rem;color:var(--dzt-muted)}
+.dzt-dashboard{padding:1.25rem 1.35rem;border:1px solid #dbeafe;border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 8px 24px rgba(30,64,175,.07);margin:.8rem 0 1.25rem}.dzt-dashboard h3{margin:0 0 .25rem;color:var(--dzt-ink)}.dzt-dashboard p{margin:.2rem 0;color:var(--dzt-muted)}
+.dzt-section-label{margin:1.8rem 0 .25rem;color:var(--dzt-blue);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.dzt-card{min-height:154px;padding:1.2rem 1.25rem;border:1px solid var(--dzt-line);border-radius:18px;background:var(--dzt-surface);box-shadow:0 6px 20px rgba(15,23,42,.045);margin-bottom:.7rem;transition:border-color .2s,transform .2s}.dzt-card:hover{border-color:#bfdbfe;transform:translateY(-1px)}.dzt-card h3{color:var(--dzt-ink);margin:0 0 .55rem;font-size:1.08rem}.dzt-card p{margin:.3rem 0;color:var(--dzt-muted);line-height:1.55}.dzt-card b{color:var(--dzt-blue-dark)}
+.dzt-step{padding:.9rem 1rem;border-left:4px solid var(--dzt-blue);border-radius:0 12px 12px 0;background:#eff6ff;margin:.6rem 0}.dzt-stage{padding:1.05rem 1.15rem;border:1px solid #bfdbfe;border-radius:15px;background:linear-gradient(135deg,#eff6ff,#fff);margin:.7rem 0}.dzt-stage strong{color:var(--dzt-blue-dark)}.dzt-flow{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:.8rem 0 1rem}.dzt-flow span{padding:.55rem .7rem;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.dzt-flow b{color:#60a5fa}
+div.stButton>button,div.stDownloadButton>button,div.stLinkButton>a{border-radius:11px;min-height:2.85rem;font-weight:600}div.stButton>button[kind="primary"]{box-shadow:0 6px 16px rgba(37,99,235,.18)}[data-testid="stMetric"]{background:#fff;border:1px solid var(--dzt-line);padding:.9rem;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,.035)}[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid var(--dzt-line)}[data-testid="stSidebar"] .stButton button{text-align:left;justify-content:flex-start;border-color:transparent;background:transparent}[data-testid="stSidebar"] .stButton button:hover{background:#eaf2ff;border-color:#dbeafe;color:var(--dzt-blue-dark)}hr{border-color:var(--dzt-line)}
+@media(max-width:640px){.block-container{padding:1rem .8rem 4rem}.dzt-hero{padding:1.3rem 1.15rem;border-radius:17px}.dzt-hero h1{font-size:1.85rem}.dzt-brandbar{padding-top:.1rem}.dzt-dashboard{padding:1rem;border-radius:15px}.dzt-card{min-height:0;padding:1rem;border-radius:15px}[data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:.55rem}[data-testid="stHorizontalBlock"]>div{min-width:100%}.stRadio [role="radiogroup"]{gap:.25rem}.stRadio [role="radiogroup"] label{margin-right:.2rem}}
 </style>""", unsafe_allow_html=True)
 
 if st.session_state.get("ui_state_version") != UI_STATE_VERSION:
@@ -272,34 +279,34 @@ if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 
     st.session_state.pop("diagnostic_state", None)
 session = get_session()
 
-st.markdown(f'<div class="dzt-hero"><h1>⚡ 电诊通</h1><p>电气控制故障排查教学原型 · 公开测试版 v{config.version}</p></div>', unsafe_allow_html=True)
+if stage == 1:
+    st.markdown(f'<div class="dzt-hero"><h1>⚡ 电诊通</h1><p>把电气知识、识图训练和模拟实训连成一条学习路径 · v{config.version}</p></div>', unsafe_allow_html=True)
+else:
+    st.markdown(f'<div class="dzt-brandbar"><strong>⚡ 电诊通</strong><span>教学模拟 · v{config.version}</span></div>', unsafe_allow_html=True)
 steps = ["选择实验", "安全确认", "逐步排查", "学习报告"]
 if stage <= 4:
     st.progress(stage / 4, text=f"第 {stage} 步 / 4：{steps[stage - 1]}")
 
 with st.sidebar:
-    st.subheader("当前实验")
-    st.write(knowledge.experiment["name"])
-    st.caption(knowledge.experiment["scope"])
+    st.markdown("### ⚡ 电诊通")
+    st.caption("电气专业学习与模拟实训")
+    if st.button("🏠 首页", use_container_width=True): set_stage(1); st.rerun()
+    if st.button("🗺️ 课程", use_container_width=True): set_stage(1); st.rerun()
+    if st.button("🧰 模拟实训", use_container_width=True):
+        st.session_state.home_focus = "practice"; set_stage(1); st.rerun()
+    if st.button("🎯 复习", use_container_width=True): set_stage(18); st.rerun()
+    if st.button("📊 我的学习", use_container_width=True): set_stage(5); st.rerun()
+    st.divider()
+    st.caption(f"当前实验 · {knowledge.experiment['name']}")
     st.warning("仅限教学模拟，不可用于真实设备诊断。")
-    if config.issues_url:
-        st.link_button("🛠️ 程序故障或专业纠错", config.issues_url, use_container_width=True)
-    if st.button("📊 学习中心", use_container_width=True):
-        set_stage(5); st.rerun()
-    if st.button("📘 知识中心", use_container_width=True):
-        open_knowledge(); st.rerun()
-    if st.button("📚 内容与资料", use_container_width=True):
-        set_stage(17); st.rerun()
-    if st.button("🎯 10分钟复习", use_container_width=True):
-        set_stage(18); st.rerun()
-    if st.button("🧭 第一次使用", use_container_width=True):
-        set_stage(7); st.rerun()
-    if st.button("🗺️ 课程地图", use_container_width=True):
-        set_stage(1); st.rerun()
-    if st.button("📖 电气术语", use_container_width=True):
-        set_stage(9); st.rerun()
-    if st.button("💾 学习档案备份", use_container_width=True):
-        set_stage(12); st.rerun()
+    with st.expander("更多工具"):
+        if st.button("📘 知识中心", use_container_width=True): open_knowledge(); st.rerun()
+        if st.button("📚 内容与资料", use_container_width=True): set_stage(17); st.rerun()
+        if st.button("🧭 第一次使用", use_container_width=True): set_stage(7); st.rerun()
+        if st.button("📖 电气术语", use_container_width=True): set_stage(9); st.rerun()
+        if st.button("💾 学习档案备份", use_container_width=True): set_stage(12); st.rerun()
+        if config.issues_url:
+            st.link_button("🛠️ 程序故障或专业纠错", config.issues_url, use_container_width=True)
     wrong_count = len(repository.wrong_question_ids())
     if wrong_count and st.button(f"📝 错题复习（{wrong_count}）", use_container_width=True):
         wrong_chapter = next((item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
@@ -313,26 +320,63 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
-    st.markdown('<div class="dzt-card"><h3>第一次来？先用5分钟体验完整学习流程</h3><p>知识卡 → 识图 → 模拟排查 → 迷你测验 → 学习总结，无需解锁课程。</p></div>', unsafe_allow_html=True)
-    if st.button("⚡ 开始5分钟体验", type="primary", use_container_width=True):
-        start_quick_experience(); st.rerun()
+    current_progress = progress_map()
+    overview = learning_overview(repository, current_progress)
+    tasks = overview["tasks"]
+    recommended_id = overview["recommended_experiment_id"]
+    last_chapter_id = st.session_state.get("last_learning_chapter_id")
+    last_chapter = chapter_by_id(last_chapter_id) if last_chapter_id in {item["id"] for item in ALL_CHAPTERS} else ALL_CHAPTERS[0]
+    st.markdown(
+        f'<div class="dzt-dashboard"><h3>今天继续学一点</h3>'
+        f'<p>建议从“{last_chapter["title"]}”继续，完成约10分钟的小任务。</p></div>',
+        unsafe_allow_html=True,
+    )
+    dashboard_metrics = st.columns(3)
+    dashboard_metrics[0].metric("今日任务", f"{tasks['completed_count']} / 3")
+    dashboard_metrics[1].metric("连续学习", f"{overview['streak']} 天")
+    dashboard_metrics[2].metric("待复习", len(review_overview(repository)["pending"]))
+    home_actions = st.columns(2)
+    if home_actions[0].button(f"继续学习 · {last_chapter['title']}", type="primary", use_container_width=True):
+        st.session_state.selected_chapter_id = last_chapter["id"]
+        set_stage(8); st.rerun()
+    if home_actions[1].button("打开今日复习", use_container_width=True):
+        set_stage(18); st.rerun()
+    with st.expander(f"今日学习任务 · 已完成 {tasks['completed_count']} / 3"):
+        st.progress(tasks["completion"])
+        st.write(f"知识卡：{'已完成' if tasks['knowledge'] else '待完成'} · "
+                 f"引导学习：{'已完成' if tasks['guided'] else '待完成'} · "
+                 f"随机练习：{min(tasks['random_practices'], 2)} / 2")
+        if not tasks["knowledge"] and st.button("开始今日知识卡", use_container_width=True):
+            target_cards = cards_for_experiment(recommended_id)
+            learned = repository.learned_cards(recommended_id)
+            target = next((item for item in target_cards if item["id"] not in learned), target_cards[0])
+            st.session_state.selected_experiment_id = recommended_id
+            open_knowledge(target["id"]); st.rerun()
+        if not tasks["guided"] and st.button("开始今日引导学习", use_container_width=True):
+            prepare_task(recommended_id, "引导学习模式"); st.rerun()
+        if not tasks["practice"] and st.button("开始今日随机练习", use_container_width=True):
+            prepare_task(recommended_id, "随机故障练习"); st.rerun()
+    with st.expander("第一次来？用5分钟体验完整流程"):
+        st.write("知识卡 → 识图 → 模拟排查 → 迷你测验 → 学习总结，无需解锁课程。")
+        if st.button("⚡ 开始5分钟体验", type="primary", use_container_width=True):
+            start_quick_experience(); st.rerun()
     if not st.session_state.get("onboarding_seen"):
         st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
             set_stage(7); st.rerun()
+    st.markdown('<div class="dzt-section-label">Learning path</div>', unsafe_allow_html=True)
     st.subheader("课程学习地图")
-    last_chapter_id = st.session_state.get("last_learning_chapter_id")
     if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
         last_chapter = chapter_by_id(last_chapter_id)
         if st.button(f"继续上次学习：{last_chapter['title']}", type="primary", use_container_width=True):
             st.session_state.selected_chapter_id = last_chapter_id
             set_stage(8); st.rerun()
-    course_columns = st.columns(len(COURSES))
+    course_columns = st.columns(2)
     for index, course in enumerate(COURSES):
         unlocked = course_is_unlocked(repository, course["id"])
         course_chapters = COURSE_CHAPTERS[course["id"]]
         course_progress = sum(chapter_progress(repository, item).completion for item in course_chapters) / len(course_chapters)
-        with course_columns[index]:
+        with course_columns[index % 2]:
             st.markdown(
                 f'<div class="dzt-card"><h3>{course["title"]}</h3><p>{course["description"]}</p>'
                 f'<p><b>{"已解锁" if unlocked else "待解锁"}</b> · {course_progress:.0%}</p></div>',
@@ -394,33 +438,7 @@ if stage == 1:
                  key=f"course_exam_{selected_course_id}", use_container_width=True):
         start_course_exam(selected_course_id); st.rerun()
     st.divider()
-    current_progress = progress_map()
-    overview = learning_overview(repository, current_progress)
-    tasks = overview["tasks"]
-    recommended_id = overview["recommended_experiment_id"]
-    st.subheader("今日学习任务 · 约10分钟")
-    st.progress(tasks["completion"], text=f"今日完成 {tasks['completed_count']} / 3 项 · 连续学习 {overview['streak']} 天")
-    task_columns = st.columns(3)
-    task_columns[0].metric("知识卡", "已完成" if tasks["knowledge"] else "0 / 1")
-    task_columns[1].metric("引导学习", "已完成" if tasks["guided"] else "0 / 1")
-    task_columns[2].metric("随机练习", f"{min(tasks['random_practices'], 2)} / 2")
-    if st.button("查看我的10分钟复习清单", type="primary", use_container_width=True):
-        set_stage(18); st.rerun()
-    if not tasks["knowledge"]:
-        if st.button("开始今日知识卡", use_container_width=True):
-            target_cards = cards_for_experiment(recommended_id)
-            learned = repository.learned_cards(recommended_id)
-            target = next((item for item in target_cards if item["id"] not in learned), target_cards[0])
-            st.session_state.selected_experiment_id = recommended_id
-            st.session_state.selected_knowledge_card = target["id"]
-            open_knowledge(target["id"]); st.rerun()
-    if not tasks["guided"]:
-        if st.button("开始今日引导学习", use_container_width=True):
-            prepare_task(recommended_id, "引导学习模式"); st.rerun()
-    if not tasks["practice"]:
-        if st.button("开始今日随机练习", type="primary", use_container_width=True):
-            prepare_task(recommended_id, "随机故障练习"); st.rerun()
-    st.divider()
+    st.markdown('<div class="dzt-section-label">Simulation lab</div>', unsafe_allow_html=True)
     st.subheader("选择一个学习实验")
     st.caption("选好实验和练习方式，下一步完成安全确认后即可开始。")
     experiment_options = list(catalog)
@@ -460,6 +478,7 @@ if stage == 1:
         set_stage(2); st.rerun()
 
 elif stage == 2:
+    st.markdown('<div class="dzt-section-label">Simulation setup</div>', unsafe_allow_html=True)
     st.subheader("开始前的安全确认")
     st.info(f"已选择：{knowledge.experiment['name']} · {st.session_state.get('practice_mode', '随机故障练习')}")
     st.warning(knowledge.data["safety_notice"])
@@ -480,6 +499,7 @@ elif stage == 2:
             st.error(str(exc))
 
 elif stage == 3:
+    st.markdown('<div class="dzt-section-label">Guided diagnosis</div>', unsafe_allow_html=True)
     st.subheader("逐步排查")
     if not session.safety_confirmed:
         st.error("安全确认状态已丢失，请重新确认。")
@@ -516,6 +536,7 @@ elif stage == 3:
             st.rerun()
 
 elif stage == 4:
+    st.markdown('<div class="dzt-section-label">Learning report</div>', unsafe_allow_html=True)
     st.subheader("学习报告")
     if not session.is_complete or session.result is None:
         st.error("诊断尚未完成。")
@@ -637,6 +658,7 @@ elif stage == 4:
         st.warning(DISCLAIMER)
 
 elif stage == 5:
+    st.markdown('<div class="dzt-section-label">My learning</div>', unsafe_allow_html=True)
     st.subheader("📊 学习中心")
     if config.storage_is_temporary:
         st.warning("云端成绩与进度使用临时存储，服务重启或更新后可能清空。")
@@ -896,6 +918,7 @@ elif stage == 8:
     chapter = chapter_by_id(selected_chapter_id)
     st.session_state.last_learning_chapter_id = chapter["id"]
     chapter_state = chapter_progress(repository, chapter)
+    st.markdown('<div class="dzt-section-label">Chapter learning</div>', unsafe_allow_html=True)
     st.subheader(chapter["title"])
     st.info(f"**本章学习目标：** {chapter['goal']}")
     st.progress(chapter_state.completion, text=f"{chapter_state.status} · {chapter_state.completion:.0%}")
