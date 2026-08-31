@@ -53,7 +53,11 @@ from dianzhentong.course import (
 from dianzhentong.insights import insight_for_result
 from dianzhentong.report import DISCLAIMER, build_report
 from dianzhentong.progress import calculate_experiment_progress, learning_overview
-from dianzhentong.provenance import provenance_for_result, resolved_sources
+from dianzhentong.provenance import (
+    CARD_PROVENANCE, SOURCES, STATUS_PARTIAL, STATUS_PENDING, STATUS_VERIFIED,
+    coverage_summary, provenance_for_card, provenance_for_diagram,
+    provenance_for_question, provenance_for_result, resolved_sources,
+)
 from dianzhentong.quiz import (
     QUESTION_MAP,
     QuizAnswer,
@@ -75,8 +79,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.1"
-STORAGE_CACHE_VERSION = "2.1-quick-experience-v1"
+UI_STATE_VERSION = "2.2"
+STORAGE_CACHE_VERSION = "2.2-content-provenance-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -219,10 +223,22 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
     body = ["| " + " | ".join(safe(row.get(column, "")) for column in columns) + " |" for row in rows]
     st.markdown("\n".join([header, divider, *body]))
 
+def render_provenance(item: dict[str, object] | None, label: str = "参考资料与核对状态") -> None:
+    if not item:
+        st.warning("该内容尚未建立来源映射。")
+        return
+    with st.expander(label):
+        st.write(f"**核对状态：** {item['status']}")
+        st.write(f"**参考原理：** {item['principle']}")
+        for source in resolved_sources(item):
+            st.markdown(f"- [{source['publisher']}｜{source['title']}]({source['url']})")
+            st.caption(f"用于核对：{source['scope']} · 最近核对：{source['checked_on']}")
+        st.caption("来源仅支持通用原理核对；教学路径不等同于真实设备检修规程。")
+
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -244,6 +260,8 @@ with st.sidebar:
         set_stage(5); st.rerun()
     if st.button("📘 知识中心", use_container_width=True):
         open_knowledge(); st.rerun()
+    if st.button("📚 内容与资料", use_container_width=True):
+        set_stage(17); st.rerun()
     if st.button("🧭 第一次使用", use_container_width=True):
         set_stage(7); st.rerun()
     if st.button("🗺️ 课程地图", use_container_width=True):
@@ -737,7 +755,7 @@ elif stage == 6:
     st.success(f"**正常模拟状态：** {card['normal']}")
     st.warning(f"**异常模拟状态：** {card['abnormal']}")
     st.write(f"**复习要点：** {card['review']}")
-    st.caption(REVIEW_STATUS)
+    render_provenance(provenance_for_card(selected_card_id))
     learned_cards = repository.learned_cards(knowledge.experiment_id)
     if selected_card_id in learned_cards:
         st.success("这张知识卡已标记为学过，可以继续复习。")
@@ -951,6 +969,7 @@ elif stage == 10:
             st.info(f"**解析：** {question.explanation}")
             st.write(f"**针对你的答案：** {answer_feedback(question, answer['selected_answer'])}")
             st.caption(f"对应知识点：{question.knowledge_point}。仅限教学模拟，不用于真实设备操作。")
+            render_provenance(provenance_for_question(card_id_for_question(question.id)), "本题参考资料")
             if st.button("查看成绩" if index == len(question_ids) - 1 else "下一题", type="primary", use_container_width=True):
                 if index == len(question_ids) - 1:
                     answers = tuple(QuizAnswer(**item) for item in quiz["answers"])
@@ -1119,6 +1138,7 @@ elif stage == 13:
             st.markdown(" → ".join(step["answer"] for step in case["steps"]))
             st.markdown("### 对应知识卡")
             st.write("、".join(KNOWLEDGE_CARDS[item]["title"] for item in case["card_ids"]))
+            render_provenance(provenance_for_diagram(case["card_ids"]), "本案例参考资料")
             chapter_cases = cases_for_chapter(case["chapter_id"])
             next_case = next((item for item in chapter_cases if item["id"] != training.case_id), chapter_cases[0])
             if st.button("再练一个案例", type="primary", use_container_width=True):
@@ -1192,6 +1212,8 @@ elif stage == 15:
                          "正确率":f"{item['accuracy']:.0%}"} for item in competency_report(answers)]
         render_markdown_table(["能力维度", "得分", "正确率"], ability_rows)
         route = review_route(answers)
+        exam_sources = tuple(dict.fromkeys(card_id_for_question(answer.question_id) for answer in answers))
+        st.info(f"本次 {len(answers)} 道题均通过知识卡来源映射生成；涉及 {len(exam_sources)} 个知识主题。")
         st.markdown("### 推荐复习路线")
         if route:
             for index, item in enumerate(route, 1):
@@ -1205,6 +1227,7 @@ elif stage == 15:
         else: st.success("本次没有错题，可继续下一门课程或进行巩固练习。")
         report_lines = ["电诊通｜课程学习总结", course["title"],
                         f"本次成绩：{result['correct_count']}/{result['total_count']}（{score:.0%}）",
+                        f"内容来源：本次题目通过 {len(exam_sources)} 个知识主题映射到官方资料；核对状态请见应用内内容与资料中心。",
                         "能力情况：", *[f"- {item['name']}：{item['accuracy']:.0%}" for item in competency_report(answers)],
                         "", "仅用于教学学习，不是职业资格、实训考核或能力认证证书。"]
         st.download_button("下载课程学习总结", data="\n".join(report_lines).encode("utf-8"),
@@ -1270,3 +1293,33 @@ elif stage == 16:
         if st.button("再体验一次", use_container_width=True): start_quick_experience(); st.rerun()
     if not quick.is_complete and st.button("退出体验", use_container_width=True):
         st.session_state.pop("quick_experience", None); set_stage(1); st.rerun()
+
+elif stage == 17:
+    st.subheader("📚 内容与资料中心")
+    st.caption("查看教学内容来自哪里、核对到什么程度，以及哪些边界仍需谨慎。")
+    question_cards = [card_id_for_question(question_id) for question_id in QUESTION_MAP]
+    diagram_groups = [case["card_ids"] for case in DIAGRAM_CASES.values()]
+    coverage = coverage_summary(question_cards, diagram_groups)
+    columns = st.columns(4)
+    columns[0].metric("官方资料", coverage["sources"])
+    columns[1].metric("知识卡", f"{coverage['cards']} / {len(KNOWLEDGE_CARDS)}")
+    columns[2].metric("题目可追溯", f"{coverage['questions']} / {coverage['question_total']}")
+    columns[3].metric("故障结论", coverage["results"])
+    st.info(f"识图案例来源覆盖：{coverage['diagrams']} / {coverage['diagram_total']}。")
+    st.markdown("### 核对状态怎么理解")
+    st.success(f"**{STATUS_VERIFIED}**：厂家资料能够支持当前呈现的通用功能或控制关系。")
+    st.warning(f"**{STATUS_PARTIAL}**：通用原理有来源，但教学排查顺序仍不是工业检修规程。")
+    st.error(f"**{STATUS_PENDING}**：不会进入课程综合评测，直到补齐可靠来源。")
+    st.markdown("### 官方资料目录")
+    for source in SOURCES.values():
+        with st.expander(f"{source['publisher']}｜{source['title']}"):
+            st.write(f"**资料类型：** {source['type']}")
+            st.write(f"**核对范围：** {source['scope']}")
+            st.write(f"**最近核对：** {source['checked_on']}")
+            st.link_button("打开官方资料", source["url"])
+    st.markdown("### 知识卡核对清单")
+    rows = [{"知识卡":KNOWLEDGE_CARDS[card_id]["title"], "状态":item["status"], "资料数":len(item["sources"])} for card_id,item in CARD_PROVENANCE.items()]
+    render_markdown_table(["知识卡", "状态", "资料数"], rows)
+    st.warning("这些资料用于解释抽象教学逻辑，不提供真实端子、电压、接线、测量或送电步骤。")
+    if st.button("返回课程地图", use_container_width=True):
+        set_stage(1); st.rerun()

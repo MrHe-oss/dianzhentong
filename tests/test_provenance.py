@@ -16,14 +16,14 @@ from dianzhentong.report import build_report
 def all_scenario_ids() -> set[str]:
     return {
         scenario_id
-        for experiment_id in ("motor_dol_no_start", "motor_forward_reverse")
+        for experiment_id in ("motor_dol_no_start", "motor_forward_reverse", "motor_jog_continuous")
         for scenario_id in KnowledgeBase(experiment_id).scenario_ids
     }
 
 
-def test_all_fourteen_faults_have_source_and_review_status():
+def test_all_twenty_faults_have_source_and_review_status():
     expected = all_scenario_ids()
-    assert len(expected) == 14
+    assert len(expected) == 20
     validate_provenance(expected)
     assert set(RESULT_PROVENANCE) == expected
 

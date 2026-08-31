@@ -4,6 +4,7 @@ import random
 from typing import Any, Sequence
 from .course import COURSES, COURSE_CHAPTERS, chapter_progress
 from .quiz import QUESTIONS, QuizAnswer, QuizQuestion, card_id_for_question
+from .provenance import is_card_assessable
 
 COMPETENCY_NAMES = {
     "safety": "安全与证据意识", "components": "元件认识",
@@ -23,14 +24,14 @@ def course_by_id(course_id: str) -> dict[str, Any]:
 
 def questions_for_course(course_id: str) -> tuple[QuizQuestion, ...]:
     chapter_ids = {item["id"] for item in COURSE_CHAPTERS[course_id]}
-    return tuple(item for item in QUESTIONS if item.chapter_id in chapter_ids)
+    return tuple(item for item in QUESTIONS if item.chapter_id in chapter_ids and is_card_assessable(card_id_for_question(item.id)))
 
 def select_course_questions(course_id: str, count: int = 10,
                             rng: random.Random | None = None) -> tuple[QuizQuestion, ...]:
     generator = rng or random.Random()
     chapters = COURSE_CHAPTERS[course_id]
     selected: list[QuizQuestion] = []
-    buckets = {item["id"]: list(question for question in QUESTIONS if question.chapter_id == item["id"]) for item in chapters}
+    buckets = {item["id"]: list(question for question in questions_for_course(course_id) if question.chapter_id == item["id"]) for item in chapters}
     for values in buckets.values(): generator.shuffle(values)
     while len(selected) < count and any(buckets.values()):
         for chapter in chapters:
