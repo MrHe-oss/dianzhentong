@@ -17,6 +17,8 @@ CHAPTER_COMPETENCY = {
     "jog_continuous_basics":"control_logic", "jog_continuous_training":"fault_reasoning",
     "diagram_symbols_roles":"diagram_reading", "series_parallel_logic":"control_logic",
     "control_path_tracing":"diagram_reading",
+    "star_delta_principles":"control_logic", "star_delta_components":"components",
+    "star_delta_sequence":"diagram_reading",
 }
 
 def course_by_id(course_id: str) -> dict[str, Any]:

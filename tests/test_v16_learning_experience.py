@@ -19,7 +19,7 @@ def solve(knowledge: KnowledgeBase, scenario_id: str) -> DiagnosticSession:
 
 
 def test_every_question_has_unique_options_answer_explanation_and_card():
-    assert len(QUESTIONS) == 60
+    assert len(QUESTIONS) == 75
     for question in QUESTIONS:
         assert len(question.options) == len(set(question.options))
         assert question.answer in question.options
@@ -40,7 +40,8 @@ def test_all_chapters_have_clear_learning_path_and_recommendation():
     for chapter in ALL_CHAPTERS:
         steps = chapter_learning_steps(repository, chapter)
         names = [item.name for item in steps]
-        if chapter["id"] in {"diagram_symbols_roles", "series_parallel_logic", "control_path_tracing"}:
+        if chapter["id"] in {"diagram_symbols_roles", "series_parallel_logic", "control_path_tracing",
+                              "star_delta_principles", "star_delta_components", "star_delta_sequence"}:
             assert names == ["学习知识卡", "完成互动识图", "通过章节测验", "完成本章总结"]
         else:
             assert names == ["学习知识卡", "通过章节测验", "完成引导实验", "完成随机练习", "完成本章总结"]

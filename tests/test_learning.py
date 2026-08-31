@@ -13,7 +13,7 @@ from dianzhentong.report import build_report
 
 
 def test_complete_knowledge_cards_exist():
-    assert len(KNOWLEDGE_CARDS) == 13
+    assert len(KNOWLEDGE_CARDS) == 17
     required = {"title", "principle", "role", "normal", "abnormal", "review"}
     assert all(required <= set(card) for card in KNOWLEDGE_CARDS.values())
     assert "待专业人员复核" in REVIEW_STATUS

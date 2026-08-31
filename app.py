@@ -80,8 +80,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.4"
-STORAGE_CACHE_VERSION = "2.4-review-mastery-v1"
+UI_STATE_VERSION = "2.5"
+STORAGE_CACHE_VERSION = "2.5-star-delta-course-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -763,7 +763,8 @@ elif stage == 6:
     st.markdown(f"<div class='dzt-flow'>{flow_html}</div>", unsafe_allow_html=True)
     st.warning("教学关系示意：不含端子号、真实电压、接线位置或带电操作步骤。")
 
-    available_cards = cards_for_experiment(knowledge.experiment_id)
+    # 课程知识中心同时承载不属于故障实验的原理卡片，例如识图与星—三角课程。
+    available_cards = tuple({"id": card_id, **card} for card_id, card in KNOWLEDGE_CARDS.items())
     card_ids = [item["id"] for item in available_cards]
     selected_card_id = st.session_state.get("selected_knowledge_card")
     if selected_card_id not in card_ids:

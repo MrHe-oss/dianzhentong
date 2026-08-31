@@ -14,6 +14,8 @@ SOURCES: dict[str, dict[str, str]] = {
     "abb_motor_control": {"title":"ABB Manual motor starters, contactors and overload relays panorama","publisher":"ABB","url":"https://library.e.abb.com/public/4345418d61514245af8fa8c5f70adf7d/1SBC100191L0203_MMS_Contactors_Overload_Relays_Panorama.pdf","type":"厂家产品技术手册","scope":"接触器、热过载继电器和电动机保护元件的功能","checked_on":CHECKED_ON},
     "abb_contactor": {"title":"ABB Open NEMA contactors and motor starters","publisher":"ABB","url":"https://new.abb.com/low-voltage/products/motor-protection/starting-solutions/open-nema-contactors-%28cr305%29","type":"厂家接触器技术资料","scope":"接触器、线圈和辅助触点的通用功能","checked_on":CHECKED_ON},
     "schneider_interlock": {"title":"Schneider Electric LE2GBK reversing starter FAQ","publisher":"Schneider Electric","url":"https://www.se.com/uk/en/faqs/FA139509/","type":"厂家正反转启动器技术资料","scope":"正反转启动器与机械、电气互锁的通用原理","checked_on":CHECKED_ON},
+    "abb_star_delta": {"title":"ABB Star-delta starting technical guide","publisher":"ABB","url":"https://library.e.abb.com/public/6b4e1a3530814df0c12579bb0030e58b/1SFC132060M0201.pdf","type":"厂家启动技术资料","scope":"星—三角启动的目的、适用条件、接触器角色与时间转换","checked_on":CHECKED_ON},
+    "schneider_star_delta": {"title":"Schneider Electric TeSys Tera star-delta operation","publisher":"Schneider Electric","url":"https://productinfo.se.com/tesys_tera_ug/tesys-tera-motor-management-system-user-guide/EN/TeSys-Tera-User%20Guide-DOCA0257-01.xml/%24/W2_TeSys_Tera_UG_StarDelta_0001013349","type":"厂家电动机控制技术说明","scope":"主、星形、三角接触器角色及星—三角操作顺序","checked_on":CHECKED_ON},
 }
 
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
@@ -33,6 +35,10 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "series_logic": _item("多个串联控制条件需要共同满足，任一中断都会阻断路径。", ("abb_dol", "abb_contactor")),
     "parallel_logic": _item("辅助触点与操作触点可形成不同的控制条件分支。", ("abb_contactor",)),
     "logic_tracing": _item("控制逻辑可按公共条件、相关分支和执行元件顺序追踪。", ("abb_dol", "schneider_interlock")),
+    "star_delta_principle": _item("星—三角启动通过星形启动阶段降低启动电流和启动转矩，再进入三角运行阶段。", ("abb_star_delta", "schneider_star_delta"), STATUS_VERIFIED),
+    "star_delta_components": _item("星—三角控制包含主、星形和三角三个接触器角色。", ("abb_star_delta", "schneider_star_delta"), STATUS_VERIFIED),
+    "star_delta_timing": _item("时间控制用于触发星形启动阶段向三角运行阶段转换。", ("abb_star_delta", "schneider_star_delta")),
+    "star_delta_interlock": _item("星形与三角接触器角色必须通过互锁和顺序约束避免同时有效。", ("abb_star_delta", "schneider_star_delta"), STATUS_VERIFIED),
 }
 
 RESULT_CARD_MAP = {

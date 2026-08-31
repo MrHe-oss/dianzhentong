@@ -29,8 +29,8 @@ def solve(scenario_id: str) -> DiagnosticSession:
 
 
 def test_second_course_has_two_chapters_and_one_experiment():
-    assert len(COURSES) == 3
-    assert len(ALL_CHAPTERS) == 9
+    assert len(COURSES) == 4
+    assert len(ALL_CHAPTERS) == 12
     assert len(SECOND_COURSE_CHAPTERS) == 2
     assert {item["experiment_id"] for item in SECOND_COURSE_CHAPTERS} == {"motor_jog_continuous"}
     assert len(COURSE_CHAPTERS[COURSES[1]["id"]]) == 2

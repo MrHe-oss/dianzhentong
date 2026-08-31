@@ -25,6 +25,12 @@ THIRD_COURSE = {
     "description": "用抽象逻辑图学习元件角色、串并联条件和控制路径追踪，不涉及真实接线。",
 }
 
+FOURTH_COURSE = {
+    "id": "star_delta_starting",
+    "title": "星—三角降压启动基础",
+    "description": "理解星—三角启动的适用条件、三个接触器角色、定时转换和互锁逻辑，不涉及真实接线。",
+}
+
 CHAPTERS = (
     {
         "id": "safety_and_circuits",
@@ -124,13 +130,44 @@ THIRD_COURSE_CHAPTERS = (
     },
 )
 
-COURSES = (COURSE, SECOND_COURSE, THIRD_COURSE)
+FOURTH_COURSE_CHAPTERS = (
+    {
+        "id": "star_delta_principles",
+        "title": "1. 启动目的与适用条件",
+        "goal": "理解星—三角启动用于降低启动阶段电流与转矩，并明确其适用边界。",
+        "points": ("降压启动目的", "启动电流与启动转矩均降低", "适合启动负载较轻且允许三角运行的电动机"),
+        "card_ids": ("star_delta_principle",), "experiment_id": None,
+        "reflection": "为什么星—三角启动不能只看启动电流降低，而忽略启动转矩和负载条件？",
+        "next": "认识三个接触器与时间控制",
+    },
+    {
+        "id": "star_delta_components",
+        "title": "2. 三个接触器与时间控制",
+        "goal": "区分主、星形和三角接触器的抽象角色，理解时间控制负责阶段转换。",
+        "points": ("主接触器维持公共运行条件", "星形接触器服务启动阶段", "三角接触器服务稳定运行阶段", "时间控制触发转换"),
+        "card_ids": ("star_delta_components", "star_delta_timing"), "experiment_id": None,
+        "reflection": "为什么识读星—三角逻辑时必须先判断当前处于启动阶段还是运行阶段？",
+        "next": "学习转换顺序与互锁",
+    },
+    {
+        "id": "star_delta_sequence",
+        "title": "3. 转换顺序与互锁逻辑",
+        "goal": "按启动请求、星形阶段、转换条件和三角阶段追踪抽象路径，并理解互锁约束。",
+        "points": ("先星形后三角", "转换过程不允许星形与三角同时有效", "互锁与阶段顺序共同约束"),
+        "card_ids": ("star_delta_timing", "star_delta_interlock"), "experiment_id": None,
+        "reflection": "为什么星形与三角接触器不能同时形成动作条件？",
+        "next": "用互动识图复盘完整阶段路径",
+    },
+)
+
+COURSES = (COURSE, SECOND_COURSE, THIRD_COURSE, FOURTH_COURSE)
 COURSE_CHAPTERS = {
     COURSE["id"]: CHAPTERS,
     SECOND_COURSE["id"]: SECOND_COURSE_CHAPTERS,
     THIRD_COURSE["id"]: THIRD_COURSE_CHAPTERS,
+    FOURTH_COURSE["id"]: FOURTH_COURSE_CHAPTERS,
 }
-ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS + THIRD_COURSE_CHAPTERS
+ALL_CHAPTERS = CHAPTERS + SECOND_COURSE_CHAPTERS + THIRD_COURSE_CHAPTERS + FOURTH_COURSE_CHAPTERS
 
 GLOSSARY = {
     "主回路": "向电动机等负载传递主要电能的回路。本平台不提供真实主回路接线指导。",
@@ -147,6 +184,9 @@ GLOSSARY = {
     "串联控制条件": "多个条件依次位于同一路径中；教学逻辑上通常需要同时满足。",
     "并联控制分支": "控制路径分成可选支路；教学逻辑上任一有效支路可形成后续条件。",
     "控制路径": "从公共条件经过操作或保护条件到执行元件的抽象逻辑关系，不代表真实导线走向。",
+    "星—三角启动": "先以星形阶段降低启动影响，再转换到三角运行阶段的启动方式；本平台只讲抽象逻辑。",
+    "时间控制": "在教学逻辑中用于触发星形启动阶段向三角运行阶段转换的条件。",
+    "阶段互锁": "阻止星形与三角两个阶段同时形成动作条件的约束逻辑。",
 }
 
 
@@ -181,6 +221,8 @@ def course_is_unlocked(repository: Any, course_id: str) -> bool:
         return any(repository.quiz_summary(item["id"])["passed_count"] for item in CHAPTERS)
     if course_id == THIRD_COURSE["id"]:
         return any(repository.quiz_summary(item["id"])["passed_count"] for item in SECOND_COURSE_CHAPTERS)
+    if course_id == FOURTH_COURSE["id"]:
+        return bool(repository.quiz_summary(THIRD_COURSE["id"])["passed_count"])
     return False
 
 
@@ -189,6 +231,8 @@ def course_unlock_requirement(course_id: str) -> str:
         return "通过第一门课程任意一个章节测验（达到60%）"
     if course_id == THIRD_COURSE["id"]:
         return "通过第二门课程任意一个章节测验（达到60%）"
+    if course_id == FOURTH_COURSE["id"]:
+        return "完成第三门课程综合评测（达到70%）"
     return "已开放"
 
 

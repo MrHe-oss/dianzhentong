@@ -22,7 +22,7 @@ def solve(case_id: str, wrong_first: bool = False) -> DiagramTrainingSession:
 
 
 def test_six_cases_have_three_unique_safe_steps_and_finish():
-    assert len(DIAGRAM_CASES) == 6
+    assert len(DIAGRAM_CASES) == 12
     for case_id, case in DIAGRAM_CASES.items():
         assert len(case["steps"]) == 3
         assert len({item["id"] for item in case["steps"]}) == 3

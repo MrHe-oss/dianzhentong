@@ -10,9 +10,9 @@ from dianzhentong.storage import MemoryPracticeRepository
 
 
 def test_third_course_has_three_chapters_and_safe_diagram_lessons():
-    assert COURSES[-1] == THIRD_COURSE
+    assert THIRD_COURSE in COURSES
     assert len(THIRD_COURSE_CHAPTERS) == 3
-    assert len(DIAGRAM_CASES) == 6
+    assert len(DIAGRAM_CASES) == 12
     text = str(DIAGRAM_CASES)
     for forbidden in ("220V", "380V", "端子号", "短接验证", "带电测量"):
         assert forbidden not in text
