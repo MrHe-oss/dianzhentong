@@ -17,6 +17,9 @@ from dianzhentong.assessment import (
     competency_report, course_exam_eligible, course_learning_status,
     review_route, select_course_questions,
 )
+from dianzhentong.quick_experience import (
+    EXPERIENCE_ITEMS, QuickExperienceSession, experience_report,
+)
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
@@ -72,8 +75,8 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 
-UI_STATE_VERSION = "2.0"
-STORAGE_CACHE_VERSION = "2.0-course-assessment-v1"
+UI_STATE_VERSION = "2.1"
+STORAGE_CACHE_VERSION = "2.1-quick-experience-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -183,6 +186,10 @@ def start_course_exam(course_id: str) -> None:
     }
     set_stage(14)
 
+def start_quick_experience() -> None:
+    st.session_state.quick_experience = QuickExperienceSession().to_dict()
+    set_stage(16)
+
 def start_comprehensive_training() -> None:
     experiment_id = secrets.choice(list(catalog))
     prepare_task(experiment_id, "综合训练")
@@ -215,7 +222,7 @@ def render_markdown_table(columns: list[str], rows: list[dict[str, object]]) -> 
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -258,6 +265,9 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
+    st.markdown('<div class="dzt-card"><h3>第一次来？先用5分钟体验完整学习流程</h3><p>知识卡 → 识图 → 模拟排查 → 迷你测验 → 学习总结，无需解锁课程。</p></div>', unsafe_allow_html=True)
+    if st.button("⚡ 开始5分钟体验", type="primary", use_container_width=True):
+        start_quick_experience(); st.rerun()
     if not st.session_state.get("onboarding_seen"):
         st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
@@ -1202,3 +1212,61 @@ elif stage == 15:
         if st.button("重新评测", type="primary", use_container_width=True): start_course_exam(course_id); st.rerun()
         if st.button("返回课程地图", use_container_width=True):
             st.session_state.pop("course_exam_state", None); set_stage(1); st.rerun()
+
+elif stage == 16:
+    try:
+        quick = QuickExperienceSession.from_dict(st.session_state.get("quick_experience", {}))
+    except (TypeError, ValueError):
+        quick = QuickExperienceSession(); st.session_state.quick_experience = quick.to_dict()
+    st.subheader("⚡ 5分钟体验电诊通")
+    st.caption("知识卡 → 识图体验 → 模拟排查 → 迷你测验 → 学习总结")
+    completed_units = (1 if quick.card_read else 0) + quick.index
+    st.progress(completed_units / (len(EXPERIENCE_ITEMS) + 1),
+                text=f"体验进度 {completed_units} / {len(EXPERIENCE_ITEMS) + 1}")
+    st.warning("全程只使用网页模拟资料，不连接设备，不提供真实接线或带电操作指导。")
+    if not quick.card_read:
+        card = KNOWLEDGE_CARDS["control_power"]
+        st.markdown("### 1. 阅读一张知识卡")
+        st.markdown(f'<div class="dzt-card"><h3>{card["title"]}</h3><p><b>原理：</b>{card["principle"]}</p><p><b>作用：</b>{card["role"]}</p></div>', unsafe_allow_html=True)
+        st.info("学习方法：先理解上游公共条件，再检查下游操作信号和执行元件。")
+        if st.button("我已读懂，进入识图体验", type="primary", use_container_width=True):
+            quick.mark_card_read(); st.session_state.quick_experience = quick.to_dict(); st.rerun()
+    elif not quick.is_complete:
+        item = quick.current_item
+        phase_number = {"识图体验":2, "模拟排查":3, "迷你测验":4}[item["phase"]]
+        st.markdown(f"### {phase_number}. {item['phase']} · {item['title']}")
+        st.info(item["context"])
+        st.markdown(f"**{item['prompt']}**")
+        selected = st.radio("请选择", item["options"], index=None,
+                            key=f"quick_choice_{item['id']}_{len(quick.first_answers)}")
+        if st.button("提交判断", type="primary", disabled=selected is None, use_container_width=True):
+            solved = quick.answer(selected); st.session_state.quick_experience = quick.to_dict()
+            if solved: st.success(f"判断正确：{item['explanation']}")
+            else: st.warning(f"首次判断已记录。{item['explanation']} 请重新选择后继续。")
+            st.rerun()
+        if quick.item_solved:
+            st.success(f"本步完成：{item['explanation']}")
+            if st.button("继续下一步", type="primary", use_container_width=True):
+                quick.next_item(); st.session_state.quick_experience = quick.to_dict(); st.rerun()
+    else:
+        report = experience_report(quick)
+        score = quick.correct_count / len(EXPERIENCE_ITEMS)
+        st.markdown("### 5. 体验学习总结")
+        st.metric("首次判断", f"{quick.correct_count} / {len(EXPERIENCE_ITEMS)}（{score:.0%}）")
+        st.success("你已经体验了电诊通的知识、识图、模拟排查和测验流程。")
+        if quick.wrong_items:
+            st.markdown("### 建议巩固")
+            for item_id in quick.wrong_items:
+                item = next(value for value in EXPERIENCE_ITEMS if value["id"] == item_id)
+                st.write(f"- **{item['phase']}：** {item['explanation']}")
+        else: st.info("全部项目首次判断正确，可以进入正式课程继续学习。")
+        st.download_button("下载体验学习总结", data=report.encode("utf-8"),
+                           file_name="电诊通_5分钟体验总结.txt", mime="text/plain", use_container_width=True)
+        st.caption("体验结果不写入正式成绩，也不会解锁或改变课程进度。")
+        if st.button("进入正式课程", type="primary", use_container_width=True):
+            st.session_state.onboarding_seen = True
+            st.session_state.selected_course_id = COURSE["id"]
+            st.session_state.pop("quick_experience", None); set_stage(1); st.rerun()
+        if st.button("再体验一次", use_container_width=True): start_quick_experience(); st.rerun()
+    if not quick.is_complete and st.button("退出体验", use_container_width=True):
+        st.session_state.pop("quick_experience", None); set_stage(1); st.rerun()
