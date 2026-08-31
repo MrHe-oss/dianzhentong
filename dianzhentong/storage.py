@@ -72,6 +72,28 @@ class DiagramPracticeRecord:
         return row
 
 
+@dataclass(frozen=True)
+class CapstoneTaskRecord:
+    session_id: str
+    completed_at: str
+    local_date: str
+    course_id: str
+    task_id: str
+    correct_steps: int
+    total_steps: int
+    passed: bool
+    first_answers: dict[str, str]
+    wrong_steps: tuple[str, ...]
+    reflection: str
+
+    def as_row(self) -> dict[str, Any]:
+        row = asdict(self)
+        row["passed"] = int(self.passed)
+        row["first_answers"] = json.dumps(self.first_answers, ensure_ascii=False)
+        row["wrong_steps"] = json.dumps(self.wrong_steps, ensure_ascii=False)
+        return row
+
+
 def beijing_now() -> datetime:
     return datetime.now(BEIJING_TZ)
 
@@ -115,6 +137,20 @@ def make_diagram_record(session: Any, completed_at: datetime | None = None) -> D
         local_date=moment.date().isoformat(), chapter_id=session.case["chapter_id"],
         case_id=session.case_id, correct_steps=session.correct_steps,
         total_steps=len(session.case["steps"]), wrong_steps=tuple(session.wrong_steps),
+    )
+
+
+def make_capstone_record(session: Any, completed_at: datetime | None = None) -> CapstoneTaskRecord:
+    if not session.can_finalize:
+        raise ValueError("综合实训尚未完成或学习反思不符合要求")
+    moment = (completed_at or beijing_now()).astimezone(BEIJING_TZ)
+    return CapstoneTaskRecord(
+        session_id=session.session_id, completed_at=moment.isoformat(timespec="seconds"),
+        local_date=moment.date().isoformat(), course_id=session.task["course_id"],
+        task_id=session.task_id, correct_steps=session.correct_steps,
+        total_steps=len(session.task["steps"]), passed=session.passed,
+        first_answers=dict(session.first_answers), wrong_steps=tuple(session.wrong_steps),
+        reflection=session.reflection.strip(),
     )
 
 
@@ -214,6 +250,23 @@ class PracticeRepository:
                     uncertain INTEGER NOT NULL CHECK (uncertain IN (0, 1)),
                     PRIMARY KEY (quiz_id, question_id),
                     FOREIGN KEY (quiz_id) REFERENCES quiz_sessions(quiz_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS capstone_task_records (
+                    session_id TEXT PRIMARY KEY,
+                    completed_at TEXT NOT NULL,
+                    local_date TEXT NOT NULL,
+                    course_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    correct_steps INTEGER NOT NULL CHECK (correct_steps >= 0),
+                    total_steps INTEGER NOT NULL CHECK (total_steps > 0),
+                    passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+                    first_answers TEXT NOT NULL,
+                    wrong_steps TEXT NOT NULL,
+                    reflection TEXT NOT NULL
                 )
                 """
             )
@@ -360,8 +413,10 @@ class PracticeRepository:
         with self.connect() as connection:
             rows = connection.execute("SELECT completed_at FROM practice_records").fetchall()
             diagram_rows = connection.execute("SELECT local_date FROM diagram_practice_records").fetchall()
+            capstone_rows = connection.execute("SELECT local_date FROM capstone_task_records").fetchall()
         dates.update(beijing_date_from_iso(row["completed_at"]) for row in rows)
         dates.update(date.fromisoformat(row["local_date"]) for row in diagram_rows)
+        dates.update(date.fromisoformat(row["local_date"]) for row in capstone_rows)
         return dates
 
     def today_progress(self, today: date | None = None) -> dict[str, int]:
@@ -484,6 +539,41 @@ class PracticeRepository:
         return [{"completed_at": item["completed_at"], "is_correct": step_id not in item["wrong_steps"]}
                 for item in records if item["case_id"] == case_id]
 
+    def save_capstone(self, record: CapstoneTaskRecord) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO capstone_task_records
+                (session_id, completed_at, local_date, course_id, task_id, correct_steps,
+                 total_steps, passed, first_answers, wrong_steps, reflection)
+                VALUES (:session_id, :completed_at, :local_date, :course_id, :task_id,
+                        :correct_steps, :total_steps, :passed, :first_answers, :wrong_steps,
+                        :reflection)""", record.as_row())
+        return cursor.rowcount == 1
+
+    def capstone_history(self, course_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM capstone_task_records
+                WHERE (? IS NULL OR course_id = ?)
+                ORDER BY completed_at DESC, rowid DESC LIMIT ?""",
+                (course_id, course_id, max(1, min(int(limit), 1000))),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["passed"] = bool(item["passed"])
+            item["first_answers"] = json.loads(item["first_answers"])
+            item["wrong_steps"] = json.loads(item["wrong_steps"])
+            result.append(item)
+        return result
+
+    def capstone_summary(self, course_id: str | None = None) -> dict[str, Any]:
+        history = self.capstone_history(course_id, 1000)
+        scores = [item["correct_steps"] / item["total_steps"] for item in history]
+        return {"attempts": len(history), "passed_count": sum(item["passed"] for item in history),
+                "best_score": max(scores, default=None),
+                "latest": history[0] if history else None}
+
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         """导出匿名原始学习记录；不包含路径、账号或设备信息。"""
         with self.connect() as connection:
@@ -502,6 +592,9 @@ class PracticeRepository:
             diagrams = [dict(row) for row in connection.execute(
                 "SELECT * FROM diagram_practice_records ORDER BY completed_at, rowid"
             ).fetchall()]
+            capstones = [dict(row) for row in connection.execute(
+                "SELECT * FROM capstone_task_records ORDER BY completed_at, rowid"
+            ).fetchall()]
         for item in practices:
             item["matched"] = bool(item["matched"])
             item["wrong_nodes"] = json.loads(item["wrong_nodes"])
@@ -512,13 +605,18 @@ class PracticeRepository:
             item["uncertain"] = bool(item["uncertain"])
         for item in diagrams:
             item["wrong_steps"] = json.loads(item["wrong_steps"])
+        for item in capstones:
+            item["passed"] = bool(item["passed"])
+            item["first_answers"] = json.loads(item["first_answers"])
+            item["wrong_steps"] = json.loads(item["wrong_steps"])
         grouped_answers: dict[str, list[dict[str, Any]]] = {}
         for item in answers:
             grouped_answers.setdefault(item.pop("quiz_id"), []).append(item)
         for item in sessions:
             item["answers"] = grouped_answers.get(item["quiz_id"], [])
         return {"practice_records": practices, "learning_activities": activities,
-                "quiz_sessions": sessions, "diagram_practice_records": diagrams}
+                "quiz_sessions": sessions, "diagram_practice_records": diagrams,
+                "capstone_task_records": capstones}
 
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
@@ -529,8 +627,9 @@ class PracticeRepository:
             answer_cursor = connection.execute("DELETE FROM quiz_answers")
             quiz_cursor = connection.execute("DELETE FROM quiz_sessions")
             diagram_cursor = connection.execute("DELETE FROM diagram_practice_records")
+            capstone_cursor = connection.execute("DELETE FROM capstone_task_records")
         return (practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount
-                + quiz_cursor.rowcount + diagram_cursor.rowcount)
+                + quiz_cursor.rowcount + diagram_cursor.rowcount + capstone_cursor.rowcount)
 
 
 class MemoryPracticeRepository:
@@ -541,6 +640,7 @@ class MemoryPracticeRepository:
         self.learning_records: dict[str, LearningActivity] = {}
         self.quiz_records: dict[str, Any] = {}
         self.diagram_records: dict[str, DiagramPracticeRecord] = {}
+        self.capstone_records: dict[str, CapstoneTaskRecord] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -623,6 +723,7 @@ class MemoryPracticeRepository:
         dates = {date.fromisoformat(item.local_date) for item in self.learning_records.values()}
         dates.update(beijing_date_from_iso(item.completed_at) for item in self.records.values())
         dates.update(date.fromisoformat(item.local_date) for item in self.diagram_records.values())
+        dates.update(date.fromisoformat(item.local_date) for item in self.capstone_records.values())
         return dates
 
     def today_progress(self, today: date | None = None) -> dict[str, int]:
@@ -714,6 +815,28 @@ class MemoryPracticeRepository:
         return [{"completed_at": item["completed_at"], "is_correct": step_id not in item["wrong_steps"]}
                 for item in records if item["case_id"] == case_id]
 
+    def save_capstone(self, record: CapstoneTaskRecord) -> bool:
+        if record.session_id in self.capstone_records:
+            return False
+        self.capstone_records[record.session_id] = record
+        return True
+
+    def capstone_history(self, course_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        records = list(self.capstone_records.values())
+        if course_id:
+            records = [item for item in records if item.course_id == course_id]
+        records.sort(key=lambda item: item.completed_at, reverse=True)
+        return [{**asdict(item), "first_answers": dict(item.first_answers),
+                 "wrong_steps": list(item.wrong_steps)}
+                for item in records[:max(1, min(int(limit), 1000))]]
+
+    def capstone_summary(self, course_id: str | None = None) -> dict[str, Any]:
+        history = self.capstone_history(course_id, 1000)
+        scores = [item["correct_steps"] / item["total_steps"] for item in history]
+        return {"attempts": len(history), "passed_count": sum(item["passed"] for item in history),
+                "best_score": max(scores, default=None),
+                "latest": history[0] if history else None}
+
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         practices = []
         for record in sorted(self.records.values(), key=lambda item: item.completed_at):
@@ -731,8 +854,13 @@ class MemoryPracticeRepository:
         diagrams = [{**asdict(item), "wrong_steps": list(item.wrong_steps)} for item in sorted(
             self.diagram_records.values(), key=lambda item: item.completed_at
         )]
+        capstones = [{**asdict(item), "first_answers": dict(item.first_answers),
+                      "wrong_steps": list(item.wrong_steps)} for item in sorted(
+            self.capstone_records.values(), key=lambda item: item.completed_at
+        )]
         return {"practice_records": practices, "learning_activities": activities,
-                "quiz_sessions": quizzes, "diagram_practice_records": diagrams}
+                "quiz_sessions": quizzes, "diagram_practice_records": diagrams,
+                "capstone_task_records": capstones}
 
     def clear(self, confirmed: bool = False) -> int:
         if not confirmed:
@@ -745,6 +873,8 @@ class MemoryPracticeRepository:
         self.quiz_records.clear()
         count += len(self.diagram_records)
         self.diagram_records.clear()
+        count += len(self.capstone_records)
+        self.capstone_records.clear()
         return count
 
 
@@ -825,6 +955,15 @@ class ResilientPracticeRepository:
 
     def diagram_step_history(self, case_id: str, step_id: str) -> list[dict[str, Any]]:
         return self._call("diagram_step_history", case_id, step_id)
+
+    def save_capstone(self, record: CapstoneTaskRecord) -> bool:
+        return bool(self._call("save_capstone", record))
+
+    def capstone_history(self, course_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        return self._call("capstone_history", course_id, limit)
+
+    def capstone_summary(self, course_id: str | None = None) -> dict[str, Any]:
+        return self._call("capstone_summary", course_id)
 
     def export_snapshot(self) -> dict[str, list[dict[str, Any]]]:
         return self._call("export_snapshot")

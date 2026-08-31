@@ -13,12 +13,13 @@ from .engine import KnowledgeBase
 from .learning import KNOWLEDGE_CARDS, cards_for_experiment
 from .progress import calculate_experiment_progress, learning_streak, beijing_today
 from .quiz import QUESTION_MAP, QuizAnswer, make_quiz_record
-from .storage import DiagramPracticeRecord, LearningActivity, PracticeRecord, beijing_now
+from .storage import CapstoneTaskRecord, DiagramPracticeRecord, LearningActivity, PracticeRecord, beijing_now
 from .diagram_learning import DIAGRAM_CASES
+from .capstone import CAPSTONE_TASKS
 
 
 ARCHIVE_FORMAT = "dianzhentong-learning-archive"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_ARCHIVE_BYTES = 5 * 1024 * 1024
 DISCLAIMER = "这是教学学习记录，不是职业资格、实训考核或能力认证证书。"
 
@@ -33,11 +34,12 @@ class ImportPreview:
     learning_activities: int
     quiz_sessions: int
     diagram_practice_records: int = 0
+    capstone_task_records: int = 0
 
     @property
     def total(self) -> int:
         return (self.practice_records + self.learning_activities + self.quiz_sessions
-                + self.diagram_practice_records)
+                + self.diagram_practice_records + self.capstone_task_records)
 
 
 def _iso(value: Any, field: str) -> str:
@@ -100,16 +102,22 @@ def validate_archive(archive: Any) -> dict[str, Any]:
     if set(archive) != {"format", "schema_version", "app_version", "exported_at", "privacy", "data"}:
         raise BackupValidationError("备份顶层结构异常")
     schema_version = archive.get("schema_version")
-    if schema_version not in {1, SCHEMA_VERSION}:
+    if schema_version not in {1, 2, SCHEMA_VERSION}:
         raise BackupValidationError("备份版本不受支持")
     _iso(archive.get("exported_at"), "导出时间")
     data = archive.get("data")
     expected = {"practice_records", "learning_activities", "quiz_sessions"}
-    if not isinstance(data, dict) or set(data) != (expected if schema_version == 1 else expected | {"diagram_practice_records"}):
+    expected_fields = (expected if schema_version == 1 else expected | {"diagram_practice_records"})
+    if schema_version == 3:
+        expected_fields |= {"capstone_task_records"}
+    if not isinstance(data, dict) or set(data) != expected_fields:
         raise BackupValidationError("备份数据结构不完整")
     if schema_version == 1:
         data = {**data, "diagram_practice_records": []}
         archive = {**archive, "data": data}
+    if schema_version in {1, 2}:
+        data = {**data, "capstone_task_records": []}
+        archive = {**archive, "schema_version": SCHEMA_VERSION, "data": data}
     if any(not isinstance(data[key], list) or len(data[key]) > 50_000 for key in data):
         raise BackupValidationError("备份记录数量异常")
 
@@ -217,20 +225,54 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         case_steps = {step["id"] for step in DIAGRAM_CASES[case_id]["steps"]}
         if len(wrong) != total - correct or len(wrong) != len(set(wrong)) or any(step not in case_steps for step in wrong):
             raise BackupValidationError("识图错误步骤无效")
+
+    for item in data["capstone_task_records"]:
+        required = {"session_id", "completed_at", "local_date", "course_id", "task_id",
+                    "correct_steps", "total_steps", "passed", "first_answers", "wrong_steps", "reflection"}
+        if not isinstance(item, dict) or set(item) != required:
+            raise BackupValidationError("综合实训记录字段不完整")
+        task_id = _text(item["task_id"], "综合实训任务")
+        if task_id not in CAPSTONE_TASKS or item["course_id"] != CAPSTONE_TASKS[task_id]["course_id"]:
+            raise BackupValidationError("综合实训任务或课程无效")
+        _text(item["session_id"], "综合实训会话"); _iso(item["completed_at"], "综合实训时间")
+        try: date.fromisoformat(item["local_date"])
+        except (TypeError, ValueError) as exc: raise BackupValidationError("综合实训日期无效") from exc
+        reflection = _text(item["reflection"], "学习反思", 300)
+        if len(reflection.strip()) < 20:
+            raise BackupValidationError("学习反思字数不足")
+        task = CAPSTONE_TASKS[task_id]
+        steps = {step["id"]: step for step in task["steps"]}
+        first_answers = item["first_answers"]
+        wrong = item["wrong_steps"]
+        correct = _integer(item["correct_steps"], "综合实训正确步骤")
+        total = _integer(item["total_steps"], "综合实训总步骤")
+        passed = _boolean(item["passed"], "综合实训通过状态")
+        if total != 5 or set(first_answers or {}) != set(steps) or not isinstance(wrong, list):
+            raise BackupValidationError("综合实训步骤记录无效")
+        for step_id, selected in first_answers.items():
+            if selected not in (*steps[step_id]["options"], "不确定"):
+                raise BackupValidationError("综合实训答案无效")
+        actual_wrong = [step_id for step_id, selected in first_answers.items()
+                        if selected != steps[step_id]["answer"]]
+        if set(wrong) != set(actual_wrong) or len(wrong) != len(set(wrong)) or correct != total - len(wrong):
+            raise BackupValidationError("综合实训得分不一致")
+        if passed != (correct / total >= 0.7):
+            raise BackupValidationError("综合实训通过状态不一致")
     return archive
 
 
 def preview_archive(archive: dict[str, Any]) -> ImportPreview:
     data = validate_archive(archive)["data"]
     return ImportPreview(len(data["practice_records"]), len(data["learning_activities"]),
-                         len(data["quiz_sessions"]), len(data["diagram_practice_records"]))
+                         len(data["quiz_sessions"]), len(data["diagram_practice_records"]),
+                         len(data["capstone_task_records"]))
 
 
 def import_archive(repository: Any, archive: dict[str, Any], confirmed: bool = False) -> dict[str, int]:
     archive = validate_archive(archive)
     if not confirmed:
-        return {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "duplicates": 0}
-    counts = {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "duplicates": 0}
+        return {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "capstone_task_records": 0, "duplicates": 0}
+    counts = {"practice_records": 0, "learning_activities": 0, "quiz_sessions": 0, "diagram_practice_records": 0, "capstone_task_records": 0, "duplicates": 0}
     data = archive["data"]
     for item in data["practice_records"]:
         record = PracticeRecord(**{**item, "wrong_nodes": tuple(item["wrong_nodes"])})
@@ -250,6 +292,10 @@ def import_archive(repository: Any, archive: dict[str, Any], confirmed: bool = F
     for item in data["diagram_practice_records"]:
         record = DiagramPracticeRecord(**{**item, "wrong_steps": tuple(item["wrong_steps"])})
         key = "diagram_practice_records" if repository.save_diagram_practice(record) else "duplicates"
+        counts[key] += 1
+    for item in data["capstone_task_records"]:
+        record = CapstoneTaskRecord(**{**item, "wrong_steps": tuple(item["wrong_steps"])})
+        key = "capstone_task_records" if repository.save_capstone(record) else "duplicates"
         counts[key] += 1
     return counts
 
@@ -288,7 +334,8 @@ def build_learning_summary(repository: Any) -> str:
         "", f"已掌握故障总数：{mastered_total}",
         f"识图训练：{repository.diagram_summary()['attempts']}次，平均正确率"
         + (f"{repository.diagram_summary()['accuracy']:.0%}。" if repository.diagram_summary()['accuracy'] is not None else "暂无。"),
-        f"档案记录：练习{len(snapshot['practice_records'])}条、学习活动{len(snapshot['learning_activities'])}条、测验{len(snapshot['quiz_sessions'])}条、识图训练{len(snapshot['diagram_practice_records'])}条。",
+        f"综合实训：{repository.capstone_summary()['attempts']}次，完成{repository.capstone_summary()['passed_count']}次。",
+        f"档案记录：练习{len(snapshot['practice_records'])}条、学习活动{len(snapshot['learning_activities'])}条、测验{len(snapshot['quiz_sessions'])}条、识图训练{len(snapshot['diagram_practice_records'])}条、综合实训{len(snapshot['capstone_task_records'])}条。",
         "", DISCLAIMER,
         "档案不包含姓名、学校、邮箱、账号或设备信息。",
     ])

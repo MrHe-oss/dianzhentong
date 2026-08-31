@@ -65,11 +65,11 @@ def test_diagram_chapter_progress_uses_40_30_30_weights():
     ]
 
 
-def test_v2_backup_roundtrip_and_v1_import_compatibility():
+def test_v3_backup_roundtrip_and_v1_import_compatibility():
     source = MemoryPracticeRepository()
     source.save_diagram_practice(make_diagram_record(solve("hold_parallel")))
     archive = create_archive(source)
-    assert archive["schema_version"] == 2
+    assert archive["schema_version"] == 3
     assert preview_archive(archive).diagram_practice_records == 1
     target = MemoryPracticeRepository()
     result = import_archive(target, parse_archive(str(__import__('json').dumps(archive))), True)
@@ -77,6 +77,7 @@ def test_v2_backup_roundtrip_and_v1_import_compatibility():
     old = copy.deepcopy(archive)
     old["schema_version"] = 1
     old["data"].pop("diagram_practice_records")
+    old["data"].pop("capstone_task_records")
     assert preview_archive(old).diagram_practice_records == 0
 
 

@@ -21,6 +21,10 @@ from dianzhentong.quick_experience import (
     EXPERIENCE_ITEMS, QuickExperienceSession, experience_report,
 )
 from dianzhentong.review_plan import build_review_plan, review_overview
+from dianzhentong.capstone import (
+    CAPSTONE_SAFETY, CAPSTONE_TASKS, CapstoneTaskSession,
+    capstone_report_text, task_for_course, task_is_unlocked,
+)
 
 from dianzhentong.config import load_config
 from dianzhentong.engine import DEFAULT_EXPERIMENT_ID, DiagnosticSession, KnowledgeBase, SessionError
@@ -77,16 +81,17 @@ from dianzhentong.quiz import (
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
-if not hasattr(storage_module.ResilientPracticeRepository, "diagram_summary"):
+if not hasattr(storage_module.ResilientPracticeRepository, "capstone_summary"):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
 choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
+make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "2.6"
-STORAGE_CACHE_VERSION = "2.6-star-delta-learning-v1"
+UI_STATE_VERSION = "2.7"
+STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -196,6 +201,13 @@ def start_course_exam(course_id: str) -> None:
     }
     set_stage(14)
 
+def start_capstone(course_id: str) -> None:
+    task = task_for_course(course_id)
+    st.session_state.capstone_state = CapstoneTaskSession(task["id"]).to_dict()
+    st.session_state.pop("capstone_report_ready", None)
+    st.session_state.selected_course_id = course_id
+    set_stage(19)
+
 def start_quick_experience() -> None:
     st.session_state.quick_experience = QuickExperienceSession().to_dict()
     set_stage(16)
@@ -253,7 +265,7 @@ def render_provenance(item: dict[str, object] | None, label: str = "参考资料
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -356,6 +368,20 @@ if stage == 1:
                 st.session_state.selected_chapter_id = chapter["id"]
                 st.session_state.last_learning_chapter_id = chapter["id"]
                 set_stage(8); st.rerun()
+    st.markdown("### 课程综合实训")
+    capstone = task_for_course(selected_course_id)
+    capstone_unlocked = task_is_unlocked(repository, selected_course_id)
+    capstone_summary = repository.capstone_summary(selected_course_id)
+    st.write(f"**{capstone['title']}** · {capstone['goal']}")
+    if capstone_summary["attempts"]:
+        st.write(f"已练习 {capstone_summary['attempts']} 次 · 最好成绩 {capstone_summary['best_score']:.0%} · "
+                 f"{'已完成' if capstone_summary['passed_count'] else '待提高'}")
+    elif not capstone_unlocked:
+        st.caption("通过本课程全部章节测验后开放；完成5个判断和学习反思，至少答对4题。")
+    if st.button("开始课程综合实训", type="primary", disabled=not capstone_unlocked,
+                 key=f"capstone_{selected_course_id}", use_container_width=True):
+        start_capstone(selected_course_id); st.rerun()
+
     st.markdown("### 课程综合评测")
     exam_summary = repository.quiz_summary(selected_course_id)
     eligible = course_exam_eligible(repository, selected_course_id)
@@ -665,6 +691,28 @@ elif stage == 5:
         exam = repository.quiz_summary(course["id"])
         if course_exam_eligible(repository, course["id"]):
             st.caption(f"综合评测：{exam['attempts']} 次 · 最好成绩 {exam['best_score']:.0%}" if exam["attempts"] else "综合评测已开放，尚未作答。")
+        capstone_item = repository.capstone_summary(course["id"])
+        if capstone_item["attempts"]:
+            st.caption(f"综合实训：{capstone_item['attempts']} 次 · 最好成绩 {capstone_item['best_score']:.0%} · "
+                       f"{'已完成' if capstone_item['passed_count'] else '待提高'}")
+        elif task_is_unlocked(repository, course["id"]):
+            st.caption("综合实训已开放，尚未开始。")
+    st.subheader("课程综合实训")
+    overall_capstone = repository.capstone_summary()
+    capstone_metrics = st.columns(3)
+    capstone_metrics[0].metric("实训次数", overall_capstone["attempts"])
+    capstone_metrics[1].metric("完成次数", overall_capstone["passed_count"])
+    capstone_metrics[2].metric("最好成绩", f"{overall_capstone['best_score']:.0%}" if overall_capstone["best_score"] is not None else "暂无")
+    recent_capstones = repository.capstone_history(limit=4)
+    if recent_capstones:
+        capstone_rows = [{"课程": next(item["title"] for item in COURSES if item["id"] == record["course_id"]),
+                          "成绩": f"{record['correct_steps']}/{record['total_steps']}",
+                          "状态": "已完成" if record["passed"] else "待提高",
+                          "时间": record["completed_at"].replace("T", " ")[:16]}
+                         for record in recent_capstones]
+        render_markdown_table(["课程", "成绩", "状态", "时间"], capstone_rows)
+    else:
+        st.caption("通过任一课程的全部章节测验后，可完成该课程综合实训。")
     quiz_overview = repository.quiz_summary()
     st.subheader("章节测验与课程评测")
     quiz_metrics = st.columns(2)
@@ -1093,11 +1141,12 @@ elif stage == 12:
         st.warning("当前记录可能在服务休眠、重启、更新或会话结束后丢失，建议下载JSON备份。")
     snapshot = repository.export_snapshot()
     record_count = sum(len(items) for items in snapshot.values())
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("练习记录", len(snapshot["practice_records"]))
     metrics[1].metric("学习活动", len(snapshot["learning_activities"]))
     metrics[2].metric("章节测验", len(snapshot["quiz_sessions"]))
     metrics[3].metric("识图训练", len(snapshot["diagram_practice_records"]))
+    metrics[4].metric("综合实训", len(snapshot["capstone_task_records"]))
     st.markdown("### 导出")
     st.download_button(
         "下载JSON完整备份", data=archive_json_bytes(repository),
@@ -1124,14 +1173,15 @@ elif stage == 12:
             st.write(
                 f"档案包含：练习 {preview.practice_records} 条、学习活动 "
                 f"{preview.learning_activities} 条、测验 {preview.quiz_sessions} 条、"
-                f"识图训练 {preview.diagram_practice_records} 条。"
+                f"识图训练 {preview.diagram_practice_records} 条、综合实训 {preview.capstone_task_records} 条。"
             )
             st.caption("导入按记录唯一标识去重；已有记录会保留，不会被较差或修改后的记录覆盖。")
             confirm_import = st.checkbox("我确认将以上匿名学习记录合并到当前档案")
             if st.button("确认导入", type="primary", disabled=not confirm_import, use_container_width=True):
                 result = import_archive(repository, archive, confirmed=True)
                 added = (result["practice_records"] + result["learning_activities"]
-                         + result["quiz_sessions"] + result["diagram_practice_records"])
+                         + result["quiz_sessions"] + result["diagram_practice_records"]
+                         + result["capstone_task_records"])
                 st.success(f"导入完成：新增 {added} 条，跳过重复 {result['duplicates']} 条。")
         except BackupValidationError as exc:
             st.error(f"无法导入：{exc}。当前学习记录未被修改。")
@@ -1386,6 +1436,9 @@ elif stage == 17:
     columns[2].metric("题目可追溯", f"{coverage['questions']} / {coverage['question_total']}")
     columns[3].metric("故障结论", coverage["results"])
     st.info(f"识图案例来源覆盖：{coverage['diagrams']} / {coverage['diagram_total']}。")
+    capstone_covered = sum(bool(provenance_for_diagram(step["card_id"] for step in task["steps"])["sources"])
+                           for task in CAPSTONE_TASKS.values())
+    st.info(f"课程综合实训来源覆盖：{capstone_covered} / {len(CAPSTONE_TASKS)}。")
     st.markdown("### 核对状态怎么理解")
     st.success(f"**{STATUS_VERIFIED}**：厂家资料能够支持当前呈现的通用功能或控制关系。")
     st.warning(f"**{STATUS_PARTIAL}**：通用原理有来源，但教学排查顺序仍不是工业检修规程。")
@@ -1440,3 +1493,106 @@ elif stage == 18:
     st.warning("复习任务仅使用教学模拟记录生成，不代表真实设备能力评估或检修建议。")
     if st.button("返回学习中心", use_container_width=True):
         set_stage(5); st.rerun()
+
+elif stage == 19:
+    raw_capstone = st.session_state.get("capstone_state")
+    try:
+        capstone_session = CapstoneTaskSession.from_dict(raw_capstone or {})
+    except (TypeError, ValueError, KeyError):
+        st.warning("综合实训状态已失效，请返回课程重新开始。")
+        if st.button("返回课程地图", use_container_width=True):
+            st.session_state.pop("capstone_state", None); set_stage(1); st.rerun()
+    else:
+        task = capstone_session.task
+        st.subheader(f"🧰 {task['title']}")
+        st.info(f"**任务目标：** {task['goal']}")
+        st.error(f"**模拟情境：** {task['scenario']}")
+        st.warning(CAPSTONE_SAFETY)
+        if not capstone_session.objective_complete:
+            step = capstone_session.current_step
+            st.progress(capstone_session.index / len(task["steps"]),
+                        text=f"首次判断 {capstone_session.index + 1} / {len(task['steps'])}")
+            st.markdown(f"### {step['prompt']}")
+            first_selected = capstone_session.first_answers.get(step["id"])
+            if first_selected is not None and first_selected != step["answer"]:
+                st.warning(f"首次判断“{first_selected}”已记录。{step['explanation']}")
+                st.info(f"推荐复习：{KNOWLEDGE_CARDS[step['card_id']]['title']}")
+            selected = st.radio(
+                "选择判断", [*step["options"], "不确定"], index=None,
+                key=f"capstone_choice_{capstone_session.session_id}_{step['id']}_{len(capstone_session.first_answers)}",
+            )
+            if st.button("提交本步判断", type="primary", disabled=selected is None, use_container_width=True):
+                solved = capstone_session.answer(selected)
+                st.session_state.capstone_state = capstone_session.to_dict()
+                if solved:
+                    st.success(f"判断正确：{step['explanation']}")
+                st.rerun()
+            if capstone_session.step_solved:
+                st.success(f"本步完成：{step['explanation']}")
+                if st.button("进入下一步", type="primary", use_container_width=True):
+                    capstone_session.next_step()
+                    st.session_state.capstone_state = capstone_session.to_dict(); st.rerun()
+            if st.button("退出本次实训", use_container_width=True):
+                st.session_state.pop("capstone_state", None); set_stage(1); st.rerun()
+        elif not st.session_state.get("capstone_report_ready"):
+            score = capstone_session.correct_steps / len(task["steps"])
+            st.progress(1.0, text=f"客观步骤完成 · 首次判断 {score:.0%}")
+            st.markdown("### 学习反思")
+            reflection = st.text_area(
+                "请用20—300字说明本次判断中最重要的依据，以及下一次准备怎样改进。",
+                value=capstone_session.reflection, max_chars=300, height=140,
+                key=f"capstone_reflection_{capstone_session.session_id}",
+            )
+            length = len(reflection.strip())
+            st.caption(f"当前 {length} 字；至少20字。请勿填写姓名、学校或真实设备信息。")
+            if st.button("提交反思并生成报告", type="primary", disabled=not 20 <= length <= 300,
+                         use_container_width=True):
+                capstone_session.set_reflection(reflection)
+                record = make_capstone_record(capstone_session)
+                repository.save_capstone(record)
+                st.session_state.capstone_state = capstone_session.to_dict()
+                st.session_state.capstone_report_ready = True
+                st.rerun()
+        else:
+            report = capstone_report_text(capstone_session)
+            score = capstone_session.correct_steps / len(task["steps"])
+            st.markdown("### 📋 综合实训学习报告")
+            metrics = st.columns(3)
+            metrics[0].metric("首次判断", f"{capstone_session.correct_steps} / {len(task['steps'])}")
+            metrics[1].metric("正确率", f"{score:.0%}")
+            metrics[2].metric("状态", "已完成" if capstone_session.passed else "待提高")
+            if capstone_session.passed:
+                st.success("已完成全部步骤、学习反思，并达到70%标准。")
+            else:
+                st.warning("已完成全部步骤和学习反思，但尚未达到70%；报告仍已保存。")
+            st.markdown("### 判断过程与错因")
+            for index, step in enumerate(task["steps"], 1):
+                selected = capstone_session.first_answers[step["id"]]
+                marker = "✅" if selected == step["answer"] else "❌"
+                st.write(f"{marker} **{index}. {step['prompt']}**")
+                st.caption(f"首次判断：{selected} · 正确判断：{step['answer']} · {step['explanation']}")
+            card_ids = tuple(dict.fromkeys(step["card_id"] for step in task["steps"]))
+            st.markdown("### 关联知识卡与复习建议")
+            st.write("、".join(KNOWLEDGE_CARDS[item]["title"] for item in card_ids))
+            if capstone_session.wrong_steps:
+                weak_cards = tuple(dict.fromkeys(step["card_id"] for step in task["steps"]
+                                                 if step["id"] in capstone_session.wrong_steps))
+                st.warning("建议优先复习：" + "、".join(KNOWLEDGE_CARDS[item]["title"] for item in weak_cards))
+            else:
+                st.success("本次首次判断全部正确，可进入10分钟复习继续巩固。")
+            st.markdown("### 我的学习反思")
+            st.write(capstone_session.reflection)
+            render_provenance(provenance_for_diagram(card_ids), "综合实训参考资料")
+            st.download_button("下载实训学习报告", data=report.encode("utf-8"),
+                               file_name="电诊通_课程综合实训报告.txt", mime="text/plain",
+                               use_container_width=True)
+            if st.button("再练一次", type="primary", use_container_width=True):
+                st.session_state.pop("capstone_report_ready", None)
+                start_capstone(task["course_id"]); st.rerun()
+            if st.button("打开10分钟复习清单", use_container_width=True):
+                st.session_state.pop("capstone_report_ready", None)
+                st.session_state.pop("capstone_state", None); set_stage(18); st.rerun()
+            if st.button("返回课程", use_container_width=True):
+                st.session_state.selected_course_id = task["course_id"]
+                st.session_state.pop("capstone_report_ready", None)
+                st.session_state.pop("capstone_state", None); set_stage(1); st.rerun()

@@ -48,7 +48,8 @@ def test_json_round_trip_restores_empty_repository(tmp_path, target_kind):
     archive = parse_archive(archive_json_bytes(source))
     target = MemoryPracticeRepository() if target_kind == "memory" else PracticeRepository(tmp_path / "restore.db")
     result = import_archive(target, archive, confirmed=True)
-    assert result == {"practice_records": 1, "learning_activities": 1, "quiz_sessions": 1, "diagram_practice_records": 0, "duplicates": 0}
+    assert result == {"practice_records": 1, "learning_activities": 1, "quiz_sessions": 1,
+                      "diagram_practice_records": 0, "capstone_task_records": 0, "duplicates": 0}
     assert target.summary()["attempts"] == 1
     assert len(target.activities()) == 1
     assert target.quiz_summary()["attempts"] == 1
@@ -72,7 +73,7 @@ def test_unconfirmed_import_has_no_side_effect():
     assert sum(result.values()) == 0
     assert target.export_snapshot() == {
         "practice_records": [], "learning_activities": [], "quiz_sessions": [],
-        "diagram_practice_records": [],
+        "diagram_practice_records": [], "capstone_task_records": [],
     }
 
 
