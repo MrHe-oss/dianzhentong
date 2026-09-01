@@ -95,7 +95,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.2"
+UI_STATE_VERSION = "3.3"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -337,7 +337,7 @@ def render_experiment_selector() -> None:
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -348,7 +348,7 @@ if stage == 1:
 else:
     st.markdown(f'<div class="dzt-brandbar"><strong>⚡ 电诊通</strong><span>教学模拟 · v{config.version}</span></div>', unsafe_allow_html=True)
 steps = ["选择实验", "安全确认", "逐步排查", "学习报告"]
-if stage <= 4:
+if stage in {2, 3, 4}:
     st.progress(stage / 4, text=f"第 {stage} 步 / 4：{steps[stage - 1]}")
 
 with st.sidebar:
@@ -384,6 +384,34 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
+    book_id = next(iter(BOOK_EDITION_MAPPINGS))
+    home_book = BOOK_EDITION_MAPPINGS[book_id]
+    book_state = textbook_progress(book_id)
+    last_chapter_id = st.session_state.get("last_learning_chapter_id")
+    valid_chapter_ids = {item["id"] for item in ALL_CHAPTERS}
+    last_chapter = chapter_by_id(last_chapter_id) if last_chapter_id in valid_chapter_ids else ALL_CHAPTERS[0]
+    st.markdown('<div class="dzt-section-label">Start learning</div>', unsafe_allow_html=True)
+    st.subheader("今天想学什么？")
+    st.markdown(
+        f'<div class="dzt-dashboard"><h3>📘 {home_book["title"]}</h3>'
+        f'<p>{home_book["author"]} · {home_book["edition"]}</p>'
+        f'<p>当前试点教材 · 已学习 {book_state["learned"]}/{book_state["total"]} 个知识点</p></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("进入教材学习", type="primary", use_container_width=True):
+        set_stage(20); st.rerun()
+    if last_chapter_id in valid_chapter_ids:
+        if st.button(f"继续上次学习 · {last_chapter['title']}", use_container_width=True):
+            st.session_state.selected_chapter_id = last_chapter["id"]
+            set_stage(8); st.rerun()
+    st.caption("其他学习方式")
+    simple_entries = st.columns(3)
+    if simple_entries[0].button("🗺️ 课程路线", use_container_width=True): set_stage(23); st.rerun()
+    if simple_entries[1].button("✍️ 练习复习", use_container_width=True): set_stage(21); st.rerun()
+    if simple_entries[2].button("🧰 实训诊断", use_container_width=True): set_stage(22); st.rerun()
+    st.caption("教材知识学习为主 · 练习、识图、实训和诊断用于巩固")
+
+elif stage == 23:
     current_progress = progress_map()
     overview = learning_overview(repository, current_progress)
     tasks = overview["tasks"]
