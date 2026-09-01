@@ -98,7 +98,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.8"
+UI_STATE_VERSION = "3.9"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -211,17 +211,31 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
     }
     set_stage(10)
 
-def start_textbook_unit_assessment(book_id: str, chapter_index: int) -> None:
-    """从单元关联题库抽取5题，沿用原有答题、错题和备份体系。"""
+def start_textbook_unit_assessment(book_id: str, chapter_index: int, pretest: bool = False) -> None:
+    """从同一单元知识范围抽题，沿用原有答题、错题和备份体系。"""
     unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
     pool = [question for chapter_id in unit["quiz_chapter_ids"] for question in questions_for_chapter(chapter_id)]
-    selected = secrets.SystemRandom().sample(pool, min(5, len(pool)))
+    count = 3 if pretest else 5
+    selected = secrets.SystemRandom().sample(pool, min(count, len(pool)))
     st.session_state.quiz_state = {
-        "chapter_id": unit["quiz_chapter_ids"][0], "mode": "textbook_unit_assessment",
+        "chapter_id": unit["quiz_chapter_ids"][0],
+        "mode": "textbook_unit_pretest" if pretest else "textbook_unit_assessment",
         "question_ids": [item.id for item in selected], "index": 0, "answers": [], "answered": False,
         "book_id": book_id, "book_chapter_index": chapter_index,
     }
     set_stage(10)
+
+def textbook_unit_effect(book_id: str, chapter_index: int) -> dict[str, object]:
+    """基于既有测验记录计算最近一次学前、学后成绩。"""
+    unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
+    history = repository.quiz_history(unit["quiz_chapter_ids"][0], 100)
+    pretests = [item for item in history if item["mode"] == "textbook_unit_pretest"]
+    posttests = [item for item in history if item["mode"] == "textbook_unit_assessment"]
+    def score(items):
+        return items[0]["correct_count"] / items[0]["total_count"] if items and items[0]["total_count"] else None
+    before, after = score(pretests), score(posttests)
+    return {"before": before, "after": after,
+            "improvement": after - before if before is not None and after is not None else None}
 
 def start_similar_quiz(question_id: str) -> None:
     question = QUESTION_MAP[question_id]
@@ -1252,16 +1266,25 @@ elif stage == 11:
     else:
         chapter = chapter_by_id(quiz["chapter_id"])
         score = result["correct_count"] / result["total_count"]
+        unit_pretest = quiz.get("mode") == "textbook_unit_pretest"
         unit_assessment = quiz.get("mode") == "textbook_unit_assessment"
-        st.subheader("📋 单元评测报告" if unit_assessment else "📋 章节测验报告")
-        if unit_assessment:
+        unit_mode = unit_pretest or unit_assessment
+        st.subheader("📋 学前小测报告" if unit_pretest else ("📋 单元评测报告" if unit_assessment else "📋 章节测验报告"))
+        if unit_mode:
             book = BOOK_EDITION_MAPPINGS[quiz["book_id"]]
             mapped_chapter = book["chapters"][quiz["book_chapter_index"]]
             st.markdown(f"### {mapped_chapter['title']}")
         else:
             st.markdown(f"### {chapter['title']}")
         st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
-        if result["passed"]:
+        if unit_assessment:
+            effect = textbook_unit_effect(quiz["book_id"], quiz["book_chapter_index"])
+            if effect["before"] is not None:
+                st.metric("学习效果", f"{effect['before']:.0%} → {score:.0%}",
+                          delta=f"{score - effect['before']:+.0%}")
+        if unit_pretest:
+            st.info("这是学习起点记录，不计入单元掌握成绩。完成小课后再参加学后评测。")
+        elif result["passed"]:
             st.success("已达到70%通过标准，单元评测完成。" if unit_assessment else "已达到60%通过标准，本章测验完成。")
         else:
             st.warning("尚未达到70%，建议先复习下方错题再测一次。" if unit_assessment else "尚未达到60%，建议先复习下方错题再测一次。")
@@ -1281,27 +1304,35 @@ elif stage == 11:
                 st.caption(f"对应知识卡：{card['title']} · 知识点：{question.knowledge_point}")
                 action_columns = st.columns(2)
                 if action_columns[0].button("复习知识卡", key=f"quiz_card_{question.id}", use_container_width=True):
-                    chapter = chapter_by_id(question.chapter_id)
-                    st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
-                    open_knowledge(card_id); st.rerun()
+                    if unit_mode and card_id in mapped_chapter["topic_ids"]:
+                        open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], card_id)
+                    else:
+                        chapter = chapter_by_id(question.chapter_id)
+                        st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
+                        open_knowledge(card_id)
+                    st.rerun()
                 if action_columns[1].button("再做一道相似题", key=f"similar_{question.id}", use_container_width=True):
                     start_similar_quiz(question.id); st.rerun()
         st.warning("测验仅用于电气知识学习，不得据此进行真实带电测量、拆线或送电操作。")
-        if wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
+        if wrong_answers and unit_mode:
+            first_wrong_card = card_id_for_question(wrong_answers[0]["question_id"])
+            if first_wrong_card in mapped_chapter["topic_ids"] and st.button("返回教材复习薄弱知识点", type="primary", use_container_width=True):
+                open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], first_wrong_card); st.rerun()
+        elif wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"], True); st.rerun()
         if st.session_state.get("review_origin"):
             if st.button("返回复习清单", type="primary", use_container_width=True):
                 st.session_state.pop("review_origin", None); st.session_state.pop("quiz_state", None)
                 set_stage(18); st.rerun()
         if st.button("再测一次", use_container_width=True):
-            if unit_assessment:
-                start_textbook_unit_assessment(quiz["book_id"], quiz["book_chapter_index"])
+            if unit_mode:
+                start_textbook_unit_assessment(quiz["book_id"], quiz["book_chapter_index"], pretest=unit_pretest)
             else:
                 start_chapter_quiz(quiz["chapter_id"])
             st.rerun()
-        if st.button("返回教材单元" if unit_assessment else "返回本章", use_container_width=True):
+        if st.button("返回教材单元" if unit_mode else "返回本章", use_container_width=True):
             st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None)
-            if unit_assessment:
+            if unit_mode:
                 st.session_state.selected_textbook_chapter = quiz["book_chapter_index"]
                 set_stage(20)
             else:
@@ -1834,6 +1865,14 @@ elif stage == 20:
     topics = topics_for_book_chapter(selected_book_id, chapter_index)
     learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
     st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
+    learning_effect = textbook_unit_effect(selected_book_id, chapter_index)
+    if learning_effect["before"] is not None:
+        effect_columns = st.columns(2)
+        effect_columns[0].metric("学前小测", f"{learning_effect['before']:.0%}")
+        effect_columns[1].metric(
+            "学后评测", f"{learning_effect['after']:.0%}" if learning_effect["after"] is not None else "待完成",
+            delta=f"{learning_effect['improvement']:+.0%}" if learning_effect["improvement"] is not None else None,
+        )
     unit_minutes = sum((lesson_for_topic(topic["id"]) or {}).get("minutes", 2) for topic in topics)
     st.caption(f"本单元共 {len(topics)} 个知识点 · 预计学习 {unit_minutes} 分钟")
     first_unlearned = next((topic["id"] for topic in topics if topic["id"] not in learned_topic_ids), topics[0]["id"])
@@ -1859,8 +1898,14 @@ elif stage == 20:
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
     action_columns[0].markdown("**单元评测**")
-    action_columns[0].caption("随机5题，答对至少4题通过。")
-    if action_columns[0].button("开始单元评测", key=f"book_quiz_start_{chapter_index}", use_container_width=True):
+    if learning_effect["before"] is None:
+        action_columns[0].caption("先完成3题学前小测，不计入掌握成绩。")
+        if action_columns[0].button("开始学前小测", key=f"book_pretest_start_{chapter_index}", use_container_width=True):
+            start_textbook_unit_assessment(selected_book_id, chapter_index, pretest=True); st.rerun()
+    else:
+        action_columns[0].caption("学后随机5题，答对至少4题通过。")
+    if action_columns[0].button("开始学后评测", key=f"book_quiz_start_{chapter_index}",
+                                disabled=learning_effect["before"] is None, use_container_width=True):
         start_textbook_unit_assessment(selected_book_id, chapter_index); st.rerun()
     case_id = action_columns[1].selectbox(
         "互动识图", mapped_chapter["case_ids"],
