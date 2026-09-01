@@ -35,6 +35,6 @@ def test_v40_has_authoring_guide_and_keeps_ui_data_components_safe():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
     guide = Path("CONTENT_AUTHORING.md").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.1"' in config and 'UI_STATE_VERSION = "4.1"' in app
+    assert 'APP_VERSION = "4.2"' in config and 'UI_STATE_VERSION = "4.2"' in app
     assert "结构化教材内容" in guide and "不得复制教材正文" in guide
     assert "st.dataframe" not in app and "st.table" not in app

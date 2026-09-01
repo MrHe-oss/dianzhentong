@@ -94,6 +94,22 @@ class CapstoneTaskRecord:
         return row
 
 
+@dataclass(frozen=True)
+class StudyNote:
+    book_id: str
+    topic_id: str
+    content: str
+    updated_at: str
+
+    def __post_init__(self) -> None:
+        cleaned = self.content.strip()
+        if not cleaned or len(cleaned) > 2000:
+            raise ValueError("学习笔记应为1—2000字")
+
+    def as_row(self) -> dict[str, str]:
+        return {**asdict(self), "content": self.content.strip()}
+
+
 def beijing_now() -> datetime:
     return datetime.now(BEIJING_TZ)
 
@@ -291,6 +307,17 @@ class PracticeRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS study_notes (
+                    book_id TEXT NOT NULL,
+                    topic_id TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (book_id, topic_id)
+                )
+                """
+            )
 
     def save(self, record: PracticeRecord) -> bool:
         row = record.as_row()
@@ -468,6 +495,37 @@ class PracticeRepository:
                 (max(1, min(int(limit), 20)),),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def save_study_note(self, note: StudyNote) -> bool:
+        with self.connect() as connection:
+            existed = connection.execute(
+                "SELECT 1 FROM study_notes WHERE book_id = ? AND topic_id = ?",
+                (note.book_id, note.topic_id),
+            ).fetchone()
+            connection.execute(
+                """INSERT INTO study_notes (book_id, topic_id, content, updated_at)
+                VALUES (:book_id, :topic_id, :content, :updated_at)
+                ON CONFLICT(book_id, topic_id) DO UPDATE SET
+                content = excluded.content, updated_at = excluded.updated_at""",
+                note.as_row(),
+            )
+        return not bool(existed)
+
+    def study_notes(self, query: str = "") -> list[dict[str, str]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM study_notes ORDER BY updated_at DESC"
+            ).fetchall()
+        terms = [item.casefold() for item in query.split() if item.strip()]
+        return [dict(row) for row in rows if all(term in row["content"].casefold() for term in terms)]
+
+    def delete_study_note(self, book_id: str, topic_id: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM study_notes WHERE book_id = ? AND topic_id = ?",
+                (book_id, topic_id),
+            )
+        return cursor.rowcount == 1
 
     def active_dates(self) -> set[date]:
         dates = {date.fromisoformat(item["local_date"]) for item in self.activities()}
@@ -691,9 +749,10 @@ class PracticeRepository:
             capstone_cursor = connection.execute("DELETE FROM capstone_task_records")
             bookmark_cursor = connection.execute("DELETE FROM textbook_bookmarks")
             visit_cursor = connection.execute("DELETE FROM textbook_visits")
+            note_cursor = connection.execute("DELETE FROM study_notes")
         return (practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount
                 + quiz_cursor.rowcount + diagram_cursor.rowcount + capstone_cursor.rowcount
-                + bookmark_cursor.rowcount + visit_cursor.rowcount)
+                + bookmark_cursor.rowcount + visit_cursor.rowcount + note_cursor.rowcount)
 
 
 class MemoryPracticeRepository:
@@ -707,6 +766,7 @@ class MemoryPracticeRepository:
         self.capstone_records: dict[str, CapstoneTaskRecord] = {}
         self.bookmark_records: dict[tuple[str, str], str] = {}
         self.textbook_visit_records: dict[tuple[str, str], dict[str, Any]] = {}
+        self.study_note_records: dict[tuple[str, str], StudyNote] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -809,6 +869,21 @@ class MemoryPracticeRepository:
     def recent_textbook_visits(self, limit: int = 6) -> list[dict[str, Any]]:
         rows = sorted(self.textbook_visit_records.values(), key=lambda item: item["visited_at"], reverse=True)
         return rows[:max(1, min(int(limit), 20))]
+
+    def save_study_note(self, note: StudyNote) -> bool:
+        key = (note.book_id, note.topic_id)
+        created = key not in self.study_note_records
+        self.study_note_records[key] = note
+        return created
+
+    def study_notes(self, query: str = "") -> list[dict[str, str]]:
+        terms = [item.casefold() for item in query.split() if item.strip()]
+        records = sorted(self.study_note_records.values(), key=lambda item: item.updated_at, reverse=True)
+        return [note.as_row() for note in records
+                if all(term in note.content.casefold() for term in terms)]
+
+    def delete_study_note(self, book_id: str, topic_id: str) -> bool:
+        return self.study_note_records.pop((book_id, topic_id), None) is not None
 
     def active_dates(self) -> set[date]:
         dates = {date.fromisoformat(item.local_date) for item in self.learning_records.values()}
@@ -969,6 +1044,8 @@ class MemoryPracticeRepository:
         count += len(self.bookmark_records) + len(self.textbook_visit_records)
         self.bookmark_records.clear()
         self.textbook_visit_records.clear()
+        count += len(self.study_note_records)
+        self.study_note_records.clear()
         return count
 
 
@@ -1028,6 +1105,15 @@ class ResilientPracticeRepository:
 
     def recent_textbook_visits(self, limit: int = 6) -> list[dict[str, Any]]:
         return self._call("recent_textbook_visits", limit)
+
+    def save_study_note(self, note: StudyNote) -> bool:
+        return bool(self._call("save_study_note", note))
+
+    def study_notes(self, query: str = "") -> list[dict[str, str]]:
+        return self._call("study_notes", query)
+
+    def delete_study_note(self, book_id: str, topic_id: str) -> bool:
+        return bool(self._call("delete_study_note", book_id, topic_id))
 
     def active_dates(self) -> set[date]:
         return self._call("active_dates")

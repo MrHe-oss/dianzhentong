@@ -64,6 +64,7 @@ from dianzhentong.textbook_learning import lesson_for_topic
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
 from dianzhentong.textbook_discovery import build_textbook_index, search_textbooks
+from dianzhentong.review_notebook import review_notebook_json, review_notebook_text
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -90,7 +91,8 @@ from dianzhentong.quiz import (
 import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
-if not hasattr(storage_module.ResilientPracticeRepository, "capstone_summary"):
+if (not hasattr(storage_module.ResilientPracticeRepository, "capstone_summary")
+        or not hasattr(storage_module.ResilientPracticeRepository, "study_notes")):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
@@ -98,9 +100,10 @@ choose_weak_scenario = storage_module.choose_weak_scenario
 make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
+StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.1"
-STORAGE_CACHE_VERSION = "4.1-textbook-navigation"
+UI_STATE_VERSION = "4.2"
+STORAGE_CACHE_VERSION = "4.2-review-notebook"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -389,7 +392,7 @@ def render_experiment_selector() -> None:
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -408,6 +411,7 @@ with st.sidebar:
     st.caption("电气专业教材学习平台")
     if st.button("🏠 学习首页", use_container_width=True): set_stage(1); st.rerun()
     if st.button("📚 教材中心", use_container_width=True): set_stage(20); st.rerun()
+    if st.button("📝 我的复习本", use_container_width=True): set_stage(25); st.rerun()
     if st.button("🧠 知识", use_container_width=True): open_knowledge(); st.rerun()
     if st.button("✍️ 练习", use_container_width=True): set_stage(21); st.rerun()
     if st.button("🧰 实训", use_container_width=True): set_stage(22); st.rerun()
@@ -827,6 +831,11 @@ elif stage == 5:
     if st.button("打开个性化复习清单", type="primary", use_container_width=True):
         set_stage(18); st.rerun()
     st.subheader("教材学习进度")
+    notebook_columns = st.columns(2)
+    notebook_columns[0].metric("个人学习笔记", len(repository.study_notes()))
+    notebook_columns[1].metric("收藏知识点", len(repository.textbook_bookmarks()))
+    if st.button("打开我的复习本", use_container_width=True):
+        set_stage(25); st.rerun()
     textbook_rows = []
     for book_id, book in BOOK_EDITION_MAPPINGS.items():
         item = textbook_progress(book_id)
@@ -2025,6 +2034,32 @@ elif stage == 24:
                          key=f"toggle_bookmark_{book_id}_{topic_id}"):
                 repository.toggle_textbook_bookmark(book_id, topic_id)
                 st.rerun()
+            existing_note = next((item for item in repository.study_notes()
+                                  if item["book_id"] == book_id and item["topic_id"] == topic_id), None)
+            with st.expander("📝 我的学习笔记", expanded=bool(existing_note)):
+                with st.form(f"study_note_form_{book_id}_{topic_id}"):
+                    note_content = st.text_area(
+                        "记录自己的理解、易错点或待复习问题",
+                        value=existing_note["content"] if existing_note else "",
+                        max_chars=2000, height=140,
+                    )
+                    st.caption("请勿在笔记中填写姓名、学校、邮箱或真实设备信息。")
+                    if st.form_submit_button("保存笔记", type="primary", use_container_width=True):
+                        if note_content.strip():
+                            repository.save_study_note(StudyNote(
+                                book_id, topic_id, note_content,
+                                storage_module.beijing_now().isoformat(timespec="seconds"),
+                            ))
+                            st.success("学习笔记已保存。")
+                            st.rerun()
+                        else:
+                            st.warning("请先写下内容再保存。")
+                if existing_note:
+                    confirm_note_delete = st.checkbox("确认删除这条笔记", key=f"confirm_note_delete_{book_id}_{topic_id}")
+                    if st.button("删除笔记", disabled=not confirm_note_delete,
+                                 key=f"delete_note_{book_id}_{topic_id}", use_container_width=True):
+                        repository.delete_study_note(book_id, topic_id)
+                        st.rerun()
             if lesson:
                 st.caption(f"预计学习 {lesson['minutes']} 分钟")
                 st.info(lesson["lead"])
@@ -2106,6 +2141,70 @@ elif stage == 24:
                 st.session_state.pop("textbook_context", None)
                 set_stage(20); st.rerun()
             st.caption("本页属于教材知识学习，不是故障诊断或真实设备操作指导。")
+
+elif stage == 25:
+    st.markdown('<div class="dzt-section-label">Personal review notebook</div>', unsafe_allow_html=True)
+    st.subheader("📝 我的复习本")
+    st.write("把个人笔记、收藏知识点和历史错题集中到一个复习入口。")
+    notes = repository.study_notes()
+    bookmarks = repository.textbook_bookmarks()
+    wrong_ids = repository.wrong_question_ids()
+    review_metrics = st.columns(3)
+    review_metrics[0].metric("学习笔记", len(notes))
+    review_metrics[1].metric("知识收藏", len(bookmarks))
+    review_metrics[2].metric("历史错题", len(wrong_ids))
+    note_query = st.text_input("搜索个人笔记", placeholder="输入笔记中的关键词")
+    note_terms = [item.casefold() for item in note_query.split() if item.strip()]
+    filtered_notes = [
+        note for note in notes
+        if all(term in (note["content"] + " " + KNOWLEDGE_TOPICS.get(note["topic_id"], {}).get("title", "")).casefold()
+               for term in note_terms)
+    ]
+    st.markdown("### 我的笔记")
+    if not filtered_notes:
+        st.info("暂无匹配笔记。打开教材知识点即可开始记录。")
+    for note_index, note in enumerate(filtered_notes):
+        topic = KNOWLEDGE_TOPICS.get(note["topic_id"])
+        if not topic:
+            continue
+        with st.expander(f"{topic['title']} · {note['updated_at'].replace('T', ' ')[:16]}"):
+            st.write(note["content"])
+            target = next((item for item in TEXTBOOK_SEARCH_INDEX
+                           if item.get("book_id") == note["book_id"] and item.get("topic_id") == note["topic_id"]), None)
+            if target and st.button("打开知识点并编辑", key=f"note_open_{note_index}", use_container_width=True):
+                open_search_result(target); st.rerun()
+    st.markdown("### 收藏知识点")
+    if not bookmarks:
+        st.caption("暂无收藏。")
+    for bookmark_index, bookmark in enumerate(bookmarks):
+        topic = KNOWLEDGE_TOPICS.get(bookmark["topic_id"])
+        target = next((item for item in TEXTBOOK_SEARCH_INDEX
+                       if item.get("book_id") == bookmark["book_id"] and item.get("topic_id") == bookmark["topic_id"]), None)
+        if topic and target and st.button(topic["title"], key=f"review_bookmark_{bookmark_index}", use_container_width=True):
+            open_search_result(target); st.rerun()
+    st.markdown("### 历史错题")
+    if wrong_ids:
+        for question_id in wrong_ids[:10]:
+            question = QUESTION_MAP.get(question_id)
+            if question:
+                st.write(f"- {question.prompt}")
+        if st.button("开始错题复习", type="primary", use_container_width=True):
+            target_chapter = next(item for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"]))
+            start_chapter_quiz(target_chapter["id"], True); st.rerun()
+    else:
+        st.caption("暂无历史错题。")
+    st.markdown("### 导出复习本")
+    topic_titles = {topic_id: item["title"] for topic_id, item in KNOWLEDGE_TOPICS.items()}
+    export_columns = st.columns(2)
+    export_columns[0].download_button(
+        "下载TXT笔记", review_notebook_text(notes, topic_titles).encode("utf-8"),
+        file_name="电诊通_我的学习笔记.txt", mime="text/plain", use_container_width=True,
+    )
+    export_columns[1].download_button(
+        "下载JSON复习本", review_notebook_json(notes, bookmarks, wrong_ids),
+        file_name="电诊通_我的复习本.json", mime="application/json", use_container_width=True,
+    )
+    st.caption("平台不主动收集身份信息；请勿在笔记中填写姓名、学校、邮箱或真实设备信息。云端记录可能随服务重启丢失，建议定期下载。")
 
 elif stage == 21:
     st.markdown('<div class="dzt-section-label">Practice center</div>', unsafe_allow_html=True)
