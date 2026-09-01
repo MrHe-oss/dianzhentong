@@ -38,7 +38,7 @@ def test_textbook_page_shows_source_progress_practice_and_training():
     app = Path("app.py").read_text(encoding="utf-8")
     for phrase in (
         "查看出版社公开书目信息", "对应公开目录", "知识点学习",
-        "本单元练习与实训", "开始5题练习", "开始互动识图", "开始引导实训",
+        "本单元练习与实训", "开始单元评测", "开始互动识图", "开始引导实训",
         "不替代纸质或正版电子教材",
     ):
         assert phrase in app

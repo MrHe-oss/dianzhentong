@@ -222,7 +222,7 @@ def make_quiz_record(chapter_id: str, answers: Sequence[QuizAnswer], mode: str =
     frozen = tuple(answers)
     correct = sum(item.is_correct for item in frozen)
     total = len(frozen)
-    threshold = 0.7 if mode == "course_exam" else (pass_threshold if pass_threshold is not None else 0.6)
+    threshold = 0.7 if mode in {"course_exam", "textbook_unit_assessment"} else (pass_threshold if pass_threshold is not None else 0.6)
     return QuizRecord(
         quiz_id=quiz_id or secrets.token_hex(12), chapter_id=chapter_id,
         completed_at=(completed_at or beijing_now()).isoformat(timespec="seconds"),

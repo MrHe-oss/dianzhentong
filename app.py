@@ -62,6 +62,7 @@ from dianzhentong.curriculum_catalog import (
 )
 from dianzhentong.textbook_learning import lesson_for_topic
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
+from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -97,7 +98,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.7"
+UI_STATE_VERSION = "3.8"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -208,6 +209,18 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
         "index": 0,
         "answers": [],
         "answered": False,
+    }
+    set_stage(10)
+
+def start_textbook_unit_assessment(book_id: str, chapter_index: int) -> None:
+    """从单元关联题库抽取5题，沿用原有答题、错题和备份体系。"""
+    unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
+    pool = [question for chapter_id in unit["quiz_chapter_ids"] for question in questions_for_chapter(chapter_id)]
+    selected = secrets.SystemRandom().sample(pool, min(5, len(pool)))
+    st.session_state.quiz_state = {
+        "chapter_id": unit["quiz_chapter_ids"][0], "mode": "textbook_unit_assessment",
+        "question_ids": [item.id for item in selected], "index": 0, "answers": [], "answered": False,
+        "book_id": book_id, "book_chapter_index": chapter_index,
     }
     set_stage(10)
 
@@ -1240,13 +1253,19 @@ elif stage == 11:
     else:
         chapter = chapter_by_id(quiz["chapter_id"])
         score = result["correct_count"] / result["total_count"]
-        st.subheader("📋 章节测验报告")
-        st.markdown(f"### {chapter['title']}")
+        unit_assessment = quiz.get("mode") == "textbook_unit_assessment"
+        st.subheader("📋 单元评测报告" if unit_assessment else "📋 章节测验报告")
+        if unit_assessment:
+            book = BOOK_EDITION_MAPPINGS[quiz["book_id"]]
+            mapped_chapter = book["chapters"][quiz["book_chapter_index"]]
+            st.markdown(f"### {mapped_chapter['title']}")
+        else:
+            st.markdown(f"### {chapter['title']}")
         st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
         if result["passed"]:
-            st.success("已达到60%通过标准，本章测验完成。")
+            st.success("已达到70%通过标准，单元评测完成。" if unit_assessment else "已达到60%通过标准，本章测验完成。")
         else:
-            st.warning("尚未达到60%，建议先复习下方错题再测一次。")
+            st.warning("尚未达到70%，建议先复习下方错题再测一次。" if unit_assessment else "尚未达到60%，建议先复习下方错题再测一次。")
         wrong_answers = [item for item in quiz["answers"] if not item["is_correct"]]
         if not wrong_answers:
             st.success("本次没有错题，判断过程正确。")
@@ -1276,10 +1295,20 @@ elif stage == 11:
                 st.session_state.pop("review_origin", None); st.session_state.pop("quiz_state", None)
                 set_stage(18); st.rerun()
         if st.button("再测一次", use_container_width=True):
-            start_chapter_quiz(quiz["chapter_id"]); st.rerun()
-        if st.button("返回本章", use_container_width=True):
-            st.session_state.selected_chapter_id = quiz["chapter_id"]
-            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
+            if unit_assessment:
+                start_textbook_unit_assessment(quiz["book_id"], quiz["book_chapter_index"])
+            else:
+                start_chapter_quiz(quiz["chapter_id"])
+            st.rerun()
+        if st.button("返回教材单元" if unit_assessment else "返回本章", use_container_width=True):
+            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None)
+            if unit_assessment:
+                st.session_state.selected_textbook_chapter = quiz["book_chapter_index"]
+                set_stage(20)
+            else:
+                st.session_state.selected_chapter_id = quiz["chapter_id"]
+                set_stage(8)
+            st.rerun()
 
 elif stage == 12:
     st.subheader("💾 学习档案导出与恢复")
@@ -1766,14 +1795,26 @@ elif stage == 20:
     st.markdown("### 项目1学习进度")
     unit_rows = []
     all_book_topic_ids = []
+    completed_case_ids = {item["case_id"] for item in repository.diagram_history(limit=1000)}
     for index, unit in enumerate(book["chapters"]):
         unit_topic_ids = list(unit["topic_ids"])
         all_book_topic_ids.extend(unit_topic_ids)
         completed = sum(topic_id in learned_topic_ids for topic_id in unit_topic_ids)
+        knowledge_done = completed == len(unit_topic_ids)
+        assessment_done = any(repository.quiz_summary(item)["passed_count"] for item in unit["quiz_chapter_ids"])
+        diagram_done = bool(set(unit["case_ids"]) & completed_case_ids)
+        if knowledge_done and assessment_done and diagram_done:
+            unit_status = "基本掌握"
+        elif knowledge_done:
+            unit_status = "待评测" if not assessment_done else "待识图巩固"
+        elif completed:
+            unit_status = "学习中"
+        else:
+            unit_status = "未开始"
         unit_rows.append({
             "单元": f"{index + 1}. {unit['title']}",
             "知识点": f"{completed}/{len(unit_topic_ids)}",
-            "状态": "已完成" if completed == len(unit_topic_ids) else ("学习中" if completed else "未开始"),
+            "状态": unit_status,
         })
     render_markdown_table(["单元", "知识点", "状态"], unit_rows)
     project_completed = sum(topic_id in learned_topic_ids for topic_id in all_book_topic_ids)
@@ -1818,13 +1859,10 @@ elif stage == 20:
         st.caption("平台原创例题，不是教材原题或课后题答案。")
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
-    quiz_chapter_id = action_columns[0].selectbox(
-        "章节练习", mapped_chapter["quiz_chapter_ids"],
-        format_func=lambda item: chapter_by_id(item)["title"],
-        key=f"book_quiz_{selected_book_id}_{chapter_index}",
-    )
-    if action_columns[0].button("开始5题练习", key=f"book_quiz_start_{chapter_index}", use_container_width=True):
-        start_chapter_quiz(quiz_chapter_id); st.rerun()
+    action_columns[0].markdown("**单元评测**")
+    action_columns[0].caption("随机5题，答对至少4题通过。")
+    if action_columns[0].button("开始单元评测", key=f"book_quiz_start_{chapter_index}", use_container_width=True):
+        start_textbook_unit_assessment(selected_book_id, chapter_index); st.rerun()
     case_id = action_columns[1].selectbox(
         "互动识图", mapped_chapter["case_ids"],
         format_func=lambda item: DIAGRAM_CASES[item]["title"],
@@ -1873,6 +1911,17 @@ elif stage == 24:
             if lesson:
                 st.caption(f"预计学习 {lesson['minutes']} 分钟")
                 st.info(lesson["lead"])
+                visual = visual_for_topic(topic_id)
+                if visual:
+                    st.markdown("### 原理图解")
+                    visual_html = "<b>→</b>".join(f"<span>{node}</span>" for node in visual["nodes"])
+                    st.write(f"**{visual['title']}**")
+                    st.markdown(f"<div class='dzt-flow'>{visual_html}</div>", unsafe_allow_html=True)
+                    st.caption(visual["caption"] + " 图中只表达抽象关系，不是接线图。")
+                if topic_id == "self_hold":
+                    with st.expander("查看自锁状态变化演示"):
+                        for state_index, (state_title, state_text) in enumerate(SELF_HOLD_STATES, 1):
+                            st.markdown(f"<div class='dzt-step'><b>{state_index}. {state_title}</b><br>{state_text}</div>", unsafe_allow_html=True)
                 st.markdown("### 本节要点")
                 for point in lesson["points"]:
                     st.write(f"- {point}")
