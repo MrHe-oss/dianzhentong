@@ -63,6 +63,7 @@ from dianzhentong.curriculum_catalog import (
 from dianzhentong.textbook_learning import lesson_for_topic
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
+from dianzhentong.textbook_discovery import build_textbook_index, search_textbooks
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -98,8 +99,8 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "4.0"
-STORAGE_CACHE_VERSION = "2.7-capstone-v1"
+UI_STATE_VERSION = "4.1"
+STORAGE_CACHE_VERSION = "4.1-textbook-navigation"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -166,7 +167,10 @@ def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None
     st.session_state.textbook_context = {
         "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
     }
+    repository.record_textbook_visit(book_id, chapter_index, topic_id)
     set_stage(24)
+
+TEXTBOOK_SEARCH_INDEX = build_textbook_index(BOOK_EDITION_MAPPINGS)
 
 def progress_map():
     result = {}
@@ -189,6 +193,18 @@ def textbook_progress(book_id: str) -> dict[str, object]:
         "total": len(topic_ids),
         "completion": learned_count / len(topic_ids) if topic_ids else 0.0,
     }
+
+def open_search_result(item: dict[str, object]) -> None:
+    """从搜索、收藏或最近学习直达教材单元/知识点。"""
+    book_id = str(item["book_id"])
+    chapter_index = int(item["chapter_index"])
+    topic_id = item.get("topic_id")
+    if topic_id:
+        open_textbook_topic(book_id, chapter_index, str(topic_id))
+    else:
+        st.session_state.selected_textbook_id = book_id
+        st.session_state.selected_textbook_chapter = chapter_index
+        set_stage(20)
 
 def prepare_task(experiment_id: str, mode: str) -> None:
     target = KnowledgeBase(experiment_id)
@@ -436,6 +452,12 @@ if stage == 1:
     )
     if st.button("进入教材学习", type="primary", use_container_width=True):
         set_stage(20); st.rerun()
+    recent_lessons = repository.recent_textbook_visits(1)
+    if recent_lessons:
+        recent_lesson = recent_lessons[0]
+        recent_title = KNOWLEDGE_TOPICS.get(recent_lesson["topic_id"], {}).get("title", "上次知识点")
+        if st.button(f"继续教材学习 · {recent_title}", use_container_width=True):
+            open_search_result(recent_lesson); st.rerun()
     if last_chapter_id in valid_chapter_ids:
         if st.button(f"继续上次学习 · {last_chapter['title']}", use_container_width=True):
             st.session_state.selected_chapter_id = last_chapter["id"]
@@ -1805,13 +1827,56 @@ elif stage == 19:
 
 elif stage == 20:
     st.markdown('<div class="dzt-section-label">Textbook learning</div>', unsafe_allow_html=True)
-    st.subheader("📚 按教材学习")
-    st.write("选择教材路线和章节，平台会调用统一知识点、原创练习与虚拟实训。")
+    st.subheader("📚 我的教材书架")
+    st.write("搜索教材、单元、知识点、公式或原创例题，也可以从收藏和最近学习继续。")
+    st.caption("按教材学习：选择教材路线和章节，知识学习是主入口，练习与实训用于巩固。")
     st.info("教材只用于章节映射；平台不提供教材正文、扫描图片或课后题答案。")
+    search_query = st.text_input(
+        "搜索学习内容", placeholder="例如：接触器、自锁、串联条件、星三角",
+        key="textbook_search_query",
+    )
+    search_results = search_textbooks(TEXTBOOK_SEARCH_INDEX, search_query)
+    if search_query:
+        st.markdown(f"### 搜索结果 · {len(search_results)}项")
+        if not search_results:
+            st.warning("暂未找到相关内容。可以减少关键词，或按教材目录浏览。")
+        for result_index, item in enumerate(search_results):
+            display_title = KNOWLEDGE_TOPICS.get(item.get("topic_id"), {}).get("title", item["title"])
+            result_columns = st.columns([4, 1])
+            result_columns[0].markdown(f"**{item['kind']} · {display_title}**  \n{item['subtitle']}")
+            if result_columns[1].button("打开", key=f"search_open_{result_index}", use_container_width=True):
+                open_search_result(item); st.rerun()
+        st.divider()
+    bookmarks = repository.textbook_bookmarks()
+    recent_visits = repository.recent_textbook_visits(6)
+    navigation_columns = st.columns(2)
+    with navigation_columns[0]:
+        st.markdown(f"### ⭐ 我的收藏 · {len(bookmarks)}")
+        if not bookmarks:
+            st.caption("打开知识点后点击收藏，常用内容会出现在这里。")
+        for item_index, item in enumerate(bookmarks[:6]):
+            topic = KNOWLEDGE_TOPICS.get(item["topic_id"])
+            if topic and st.button(topic["title"], key=f"bookmark_open_{item_index}", use_container_width=True):
+                target = next((entry for entry in TEXTBOOK_SEARCH_INDEX
+                               if entry.get("book_id") == item["book_id"] and entry.get("topic_id") == item["topic_id"]), None)
+                if target: open_search_result(target); st.rerun()
+    with navigation_columns[1]:
+        st.markdown("### 🕘 最近学习")
+        if not recent_visits:
+            st.caption("开始学习知识点后，这里会记录最近访问位置。")
+        for item_index, item in enumerate(recent_visits):
+            topic = KNOWLEDGE_TOPICS.get(item["topic_id"])
+            if topic and st.button(topic["title"], key=f"recent_open_{item_index}", use_container_width=True):
+                open_search_result(item); st.rerun()
+    st.divider()
+    st.markdown("### 全部教材")
     book_ids = list(BOOK_EDITION_MAPPINGS)
+    if st.session_state.get("selected_textbook_id") not in book_ids:
+        st.session_state.selected_textbook_id = book_ids[0]
     selected_book_id = st.selectbox(
         "教材与版本", book_ids,
         format_func=lambda item: f"{BOOK_EDITION_MAPPINGS[item]['title']} · {BOOK_EDITION_MAPPINGS[item]['edition']}",
+        key="selected_textbook_id",
     )
     book = BOOK_EDITION_MAPPINGS[selected_book_id]
     book_metrics = st.columns(3)
@@ -1952,6 +2017,14 @@ elif stage == 24:
             st.markdown('<div class="dzt-section-label">Textbook lesson</div>', unsafe_allow_html=True)
             st.caption(f"{book['title']}  ›  {mapped_chapter['title']}  ›  知识点 {topic_index + 1}/{len(topic_ids)}")
             st.subheader(card["title"])
+            is_bookmarked = any(
+                item["book_id"] == book_id and item["topic_id"] == topic_id
+                for item in repository.textbook_bookmarks()
+            )
+            if st.button("★ 取消收藏" if is_bookmarked else "☆ 收藏知识点", use_container_width=True,
+                         key=f"toggle_bookmark_{book_id}_{topic_id}"):
+                repository.toggle_textbook_bookmark(book_id, topic_id)
+                st.rerun()
             if lesson:
                 st.caption(f"预计学习 {lesson['minutes']} 分钟")
                 st.info(lesson["lead"])

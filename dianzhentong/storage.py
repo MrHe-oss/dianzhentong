@@ -270,6 +270,27 @@ class PracticeRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS textbook_bookmarks (
+                    book_id TEXT NOT NULL,
+                    topic_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (book_id, topic_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS textbook_visits (
+                    book_id TEXT NOT NULL,
+                    chapter_index INTEGER NOT NULL,
+                    topic_id TEXT NOT NULL,
+                    visited_at TEXT NOT NULL,
+                    PRIMARY KEY (book_id, topic_id)
+                )
+                """
+            )
 
     def save(self, record: PracticeRecord) -> bool:
         row = record.as_row()
@@ -407,6 +428,46 @@ class PracticeRepository:
             item["reference_id"] for item in self.activities(experiment_id)
             if item["activity_type"] == "knowledge_card"
         }
+
+    def toggle_textbook_bookmark(self, book_id: str, topic_id: str) -> bool:
+        """切换收藏状态，返回切换后的状态。"""
+        with self.connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM textbook_bookmarks WHERE book_id = ? AND topic_id = ?",
+                (book_id, topic_id),
+            ).fetchone()
+            if exists:
+                connection.execute("DELETE FROM textbook_bookmarks WHERE book_id = ? AND topic_id = ?", (book_id, topic_id))
+                return False
+            connection.execute(
+                "INSERT INTO textbook_bookmarks VALUES (?, ?, ?)",
+                (book_id, topic_id, beijing_now().isoformat(timespec="seconds")),
+            )
+            return True
+
+    def textbook_bookmarks(self) -> list[dict[str, str]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM textbook_bookmarks ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_textbook_visit(self, book_id: str, chapter_index: int, topic_id: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """INSERT INTO textbook_visits (book_id, chapter_index, topic_id, visited_at)
+                VALUES (?, ?, ?, ?) ON CONFLICT(book_id, topic_id) DO UPDATE SET
+                chapter_index = excluded.chapter_index, visited_at = excluded.visited_at""",
+                (book_id, chapter_index, topic_id, beijing_now().isoformat(timespec="seconds")),
+            )
+
+    def recent_textbook_visits(self, limit: int = 6) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM textbook_visits ORDER BY visited_at DESC LIMIT ?",
+                (max(1, min(int(limit), 20)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def active_dates(self) -> set[date]:
         dates = {date.fromisoformat(item["local_date"]) for item in self.activities()}
@@ -628,8 +689,11 @@ class PracticeRepository:
             quiz_cursor = connection.execute("DELETE FROM quiz_sessions")
             diagram_cursor = connection.execute("DELETE FROM diagram_practice_records")
             capstone_cursor = connection.execute("DELETE FROM capstone_task_records")
+            bookmark_cursor = connection.execute("DELETE FROM textbook_bookmarks")
+            visit_cursor = connection.execute("DELETE FROM textbook_visits")
         return (practice_cursor.rowcount + activity_cursor.rowcount + answer_cursor.rowcount
-                + quiz_cursor.rowcount + diagram_cursor.rowcount + capstone_cursor.rowcount)
+                + quiz_cursor.rowcount + diagram_cursor.rowcount + capstone_cursor.rowcount
+                + bookmark_cursor.rowcount + visit_cursor.rowcount)
 
 
 class MemoryPracticeRepository:
@@ -641,6 +705,8 @@ class MemoryPracticeRepository:
         self.quiz_records: dict[str, Any] = {}
         self.diagram_records: dict[str, DiagramPracticeRecord] = {}
         self.capstone_records: dict[str, CapstoneTaskRecord] = {}
+        self.bookmark_records: dict[tuple[str, str], str] = {}
+        self.textbook_visit_records: dict[tuple[str, str], dict[str, Any]] = {}
 
     def save(self, record: PracticeRecord) -> bool:
         if record.practice_id in self.records:
@@ -718,6 +784,31 @@ class MemoryPracticeRepository:
             item.reference_id for item in self.learning_records.values()
             if item.experiment_id == experiment_id and item.activity_type == "knowledge_card"
         }
+
+    def toggle_textbook_bookmark(self, book_id: str, topic_id: str) -> bool:
+        key = (book_id, topic_id)
+        if key in self.bookmark_records:
+            del self.bookmark_records[key]
+            return False
+        self.bookmark_records[key] = beijing_now().isoformat(timespec="seconds")
+        return True
+
+    def textbook_bookmarks(self) -> list[dict[str, str]]:
+        rows = [
+            {"book_id": book_id, "topic_id": topic_id, "created_at": created_at}
+            for (book_id, topic_id), created_at in self.bookmark_records.items()
+        ]
+        return sorted(rows, key=lambda item: item["created_at"], reverse=True)
+
+    def record_textbook_visit(self, book_id: str, chapter_index: int, topic_id: str) -> None:
+        self.textbook_visit_records[(book_id, topic_id)] = {
+            "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
+            "visited_at": beijing_now().isoformat(timespec="seconds"),
+        }
+
+    def recent_textbook_visits(self, limit: int = 6) -> list[dict[str, Any]]:
+        rows = sorted(self.textbook_visit_records.values(), key=lambda item: item["visited_at"], reverse=True)
+        return rows[:max(1, min(int(limit), 20))]
 
     def active_dates(self) -> set[date]:
         dates = {date.fromisoformat(item.local_date) for item in self.learning_records.values()}
@@ -875,6 +966,9 @@ class MemoryPracticeRepository:
         self.diagram_records.clear()
         count += len(self.capstone_records)
         self.capstone_records.clear()
+        count += len(self.bookmark_records) + len(self.textbook_visit_records)
+        self.bookmark_records.clear()
+        self.textbook_visit_records.clear()
         return count
 
 
@@ -922,6 +1016,18 @@ class ResilientPracticeRepository:
 
     def learned_cards(self, experiment_id: str) -> set[str]:
         return self._call("learned_cards", experiment_id)
+
+    def toggle_textbook_bookmark(self, book_id: str, topic_id: str) -> bool:
+        return bool(self._call("toggle_textbook_bookmark", book_id, topic_id))
+
+    def textbook_bookmarks(self) -> list[dict[str, str]]:
+        return self._call("textbook_bookmarks")
+
+    def record_textbook_visit(self, book_id: str, chapter_index: int, topic_id: str) -> None:
+        self._call("record_textbook_visit", book_id, chapter_index, topic_id)
+
+    def recent_textbook_visits(self, limit: int = 6) -> list[dict[str, Any]]:
+        return self._call("recent_textbook_visits", limit)
 
     def active_dates(self) -> set[date]:
         return self._call("active_dates")

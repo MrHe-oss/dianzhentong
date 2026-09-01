@@ -15,7 +15,7 @@ def test_sample_unit_has_eight_complete_micro_lessons():
 def test_sample_unit_ui_has_orientation_checks_and_continuous_navigation():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.0"' in config and 'UI_STATE_VERSION = "4.0"' in app
+    assert 'APP_VERSION = "4.1"' in config and 'UI_STATE_VERSION = "4.1"' in app
     for phrase in ("预计学习", "开始本单元学习", "继续本单元学习", "本节要点", "即时检查", "下一个知识点"):
         assert phrase in app
     assert "完成即时检查后即可记录本节进度" in app
