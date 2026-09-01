@@ -61,6 +61,7 @@ from dianzhentong.curriculum_catalog import (
     topics_for_book_chapter,
 )
 from dianzhentong.textbook_learning import lesson_for_topic
+from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -96,7 +97,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.6"
+UI_STATE_VERSION = "3.7"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -1808,6 +1809,13 @@ elif stage == 20:
             )
             if st.button("学习这个知识点", key=f"book_topic_{topic['id']}", use_container_width=True):
                 open_textbook_topic(selected_book_id, chapter_index, topic["id"]); st.rerun()
+    unit_example = example_for_unit(chapter_index)
+    with st.expander(f"🧩 {unit_example['title']}"):
+        st.write(f"**题目：** {unit_example['scenario']}")
+        for step_index, step in enumerate(unit_example["steps"], 1):
+            st.write(f"{step_index}. {step}")
+        st.success(f"**结论：** {unit_example['answer']}")
+        st.caption("平台原创例题，不是教材原题或课后题答案。")
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
     quiz_chapter_id = action_columns[0].selectbox(
@@ -1885,6 +1893,30 @@ elif stage == 24:
                 st.warning(f"**常见误区：** {card['abnormal']}")
             st.markdown("### 学习小结")
             st.write(card["review"])
+            formulas = formulas_for_topic(topic_id)
+            if formulas:
+                st.markdown("### 抽象逻辑公式")
+                for formula in formulas:
+                    st.write(f"**{formula['title']}**")
+                    st.latex(formula["expression"])
+                    for symbol in formula["symbols"]:
+                        st.write(f"- {symbol}")
+                    st.caption(formula["meaning"])
+                st.caption("公式表达控制逻辑关系，不代表真实接线方式。")
+            unit_example = example_for_unit(chapter_index)
+            with st.expander("原创例题与分步解析"):
+                st.write(f"**题目：** {unit_example['scenario']}")
+                for step_index, step in enumerate(unit_example["steps"], 1):
+                    st.write(f"{step_index}. {step}")
+                st.success(f"**结论：** {unit_example['answer']}")
+                st.markdown("#### 变式练习")
+                variant_key = f"textbook_variant_{book_id}_{chapter_index}_{topic_id}"
+                variant_answer = st.radio(unit_example["practice"], unit_example["options"], index=None, key=variant_key)
+                if variant_answer == unit_example["practice_answer"]:
+                    st.success(f"回答正确。{unit_example['practice_explanation']}")
+                elif variant_answer:
+                    st.warning(f"请重新分析。{unit_example['practice_explanation']}")
+                st.caption("平台原创例题与练习，不是教材原题或官方答案。")
             render_provenance(provenance_for_card(topic_id))
             activity_experiment_id = (mapped_chapter["experiment_ids"] or (DEFAULT_EXPERIMENT_ID,))[0]
             learned = set().union(*(repository.learned_cards(item) for item in catalog))
