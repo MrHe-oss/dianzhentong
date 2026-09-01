@@ -27,3 +27,9 @@ def test_v38_ui_has_visuals_assessment_and_mastery_states():
     for phrase in ("原理图解", "查看自锁状态变化演示", "开始单元评测", "单元评测报告", "基本掌握", "待识图巩固"):
         assert phrase in app
     assert "图中只表达抽象关系，不是接线图" in app
+
+
+def test_opening_topic_does_not_mutate_instantiated_chapter_widget():
+    app = Path("app.py").read_text(encoding="utf-8")
+    helper = app.split("def open_textbook_topic", 1)[1].split("def progress_map", 1)[0]
+    assert "selected_textbook_chapter" not in helper

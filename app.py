@@ -166,7 +166,6 @@ def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None
     st.session_state.textbook_context = {
         "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
     }
-    st.session_state.selected_textbook_chapter = chapter_index
     set_stage(24)
 
 def progress_map():
