@@ -95,7 +95,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.1"
+UI_STATE_VERSION = "3.2"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -167,6 +167,18 @@ def progress_map():
             repository, experiment_id, experiment_knowledge.scenario_ids, card_ids
         )
     return result
+
+def textbook_progress(book_id: str) -> dict[str, object]:
+    """汇总教材映射知识点的学习进度，不改变原有课程和实验成绩。"""
+    book = BOOK_EDITION_MAPPINGS[book_id]
+    topic_ids = [topic_id for chapter in book["chapters"] for topic_id in chapter["topic_ids"]]
+    learned = set().union(*(repository.learned_cards(item) for item in catalog))
+    learned_count = sum(topic_id in learned for topic_id in topic_ids)
+    return {
+        "learned": learned_count,
+        "total": len(topic_ids),
+        "completion": learned_count / len(topic_ids) if topic_ids else 0.0,
+    }
 
 def prepare_task(experiment_id: str, mode: str) -> None:
     target = KnowledgeBase(experiment_id)
@@ -341,14 +353,15 @@ if stage <= 4:
 
 with st.sidebar:
     st.markdown("### ⚡ 电诊通")
-    st.caption("电气专业学习与模拟实训")
-    if st.button("📖 学习", use_container_width=True): set_stage(1); st.rerun()
+    st.caption("电气专业教材学习平台")
+    if st.button("🏠 学习首页", use_container_width=True): set_stage(1); st.rerun()
+    if st.button("📚 教材中心", use_container_width=True): set_stage(20); st.rerun()
     if st.button("🧠 知识", use_container_width=True): open_knowledge(); st.rerun()
     if st.button("✍️ 练习", use_container_width=True): set_stage(21); st.rerun()
     if st.button("🧰 实训", use_container_width=True): set_stage(22); st.rerun()
     if st.button("📊 我的学习", use_container_width=True): set_stage(5); st.rerun()
     st.divider()
-    st.caption(f"当前实验 · {knowledge.experiment['name']}")
+    st.caption("实训与诊断为辅助学习工具")
     st.warning("仅限教学模拟，不可用于真实设备诊断。")
     with st.expander("更多工具"):
         if st.button("📘 知识中心", use_container_width=True): open_knowledge(); st.rerun()
@@ -377,9 +390,27 @@ if stage == 1:
     recommended_id = overview["recommended_experiment_id"]
     last_chapter_id = st.session_state.get("last_learning_chapter_id")
     last_chapter = chapter_by_id(last_chapter_id) if last_chapter_id in {item["id"] for item in ALL_CHAPTERS} else ALL_CHAPTERS[0]
+    book_id = next(iter(BOOK_EDITION_MAPPINGS))
+    home_book = BOOK_EDITION_MAPPINGS[book_id]
+    book_state = textbook_progress(book_id)
+    st.markdown('<div class="dzt-section-label">Textbook first</div>', unsafe_allow_html=True)
+    st.subheader("从教材开始学习")
     st.markdown(
-        f'<div class="dzt-dashboard"><h3>今天继续学一点</h3>'
-        f'<p>建议从“{last_chapter["title"]}”继续，完成约10分钟的小任务。</p></div>',
+        f'<div class="dzt-dashboard"><h3>📘 {home_book["title"]}</h3>'
+        f'<p>{home_book["author"]} · {home_book["publisher"]} · {home_book["edition"]}</p>'
+        f'<p>按教材目录学习知识，再用练习、识图、实训和诊断巩固。</p></div>',
+        unsafe_allow_html=True,
+    )
+    st.progress(book_state["completion"], text=f"教材知识点进度 {book_state['learned']} / {book_state['total']}")
+    textbook_actions = st.columns(2)
+    if textbook_actions[0].button("进入教材目录", type="primary", use_container_width=True):
+        set_stage(20); st.rerun()
+    if textbook_actions[1].button(f"继续学习 · {last_chapter['title']}", use_container_width=True):
+        st.session_state.selected_chapter_id = last_chapter["id"]
+        set_stage(8); st.rerun()
+    st.markdown(
+        f'<div class="dzt-dashboard"><h3>今日学习建议</h3>'
+        f'<p>从“{last_chapter["title"]}”继续，完成约10分钟的小任务。</p></div>',
         unsafe_allow_html=True,
     )
     dashboard_metrics = st.columns(3)
@@ -415,8 +446,8 @@ if stage == 1:
         st.info("👋 第一次使用？先用1分钟了解如何阅读模拟资料和选择答案。")
         if st.button("开始1分钟新手引导", type="primary", use_container_width=True):
             set_stage(7); st.rerun()
-    st.markdown('<div class="dzt-section-label">Learning path</div>', unsafe_allow_html=True)
-    st.subheader("课程学习地图")
+    st.markdown('<div class="dzt-section-label">Supporting courses</div>', unsafe_allow_html=True)
+    st.subheader("配套课程与知识路线")
     if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
         last_chapter = chapter_by_id(last_chapter_id)
         if st.button(f"继续上次学习：{last_chapter['title']}", type="primary", use_container_width=True):
@@ -489,9 +520,9 @@ if stage == 1:
                  key=f"course_exam_{selected_course_id}", use_container_width=True):
         start_course_exam(selected_course_id); st.rerun()
     st.divider()
-    st.markdown('<div class="dzt-section-label">More ways to learn</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dzt-section-label">Supporting tools</div>', unsafe_allow_html=True)
     next_columns = st.columns(3)
-    if next_columns[0].button("📚 按教材学习", use_container_width=True): set_stage(20); st.rerun()
+    if next_columns[0].button("📚 返回教材中心", use_container_width=True): set_stage(20); st.rerun()
     if next_columns[1].button("✍️ 进入练习中心", use_container_width=True): set_stage(21); st.rerun()
     if next_columns[2].button("🧰 进入虚拟实训", use_container_width=True): set_stage(22); st.rerun()
 
@@ -709,13 +740,24 @@ elif stage == 5:
     render_markdown_table(["类型", "待复习", "已掌握"], mastery_rows)
     if st.button("打开个性化复习清单", type="primary", use_container_width=True):
         set_stage(18); st.rerun()
+    st.subheader("教材学习进度")
+    textbook_rows = []
+    for book_id, book in BOOK_EDITION_MAPPINGS.items():
+        item = textbook_progress(book_id)
+        textbook_rows.append({
+            "教材": book["title"], "版本": book["edition"],
+            "知识点": f"{item['learned']}/{item['total']}", "完成度": f"{item['completion']:.0%}",
+        })
+    render_markdown_table(["教材", "版本", "知识点", "完成度"], textbook_rows)
+    if st.button("继续教材学习", type="primary", use_container_width=True):
+        set_stage(20); st.rerun()
     last_chapter_id = st.session_state.get("last_learning_chapter_id")
     if last_chapter_id in {item["id"] for item in ALL_CHAPTERS}:
         last_chapter = chapter_by_id(last_chapter_id)
         st.info(f"最近学习位置：{last_chapter['title']} · 下一步：{recommended_chapter_action(repository, last_chapter)}")
         if st.button("继续最近章节", use_container_width=True):
             st.session_state.selected_chapter_id = last_chapter_id; set_stage(8); st.rerun()
-    st.subheader("课程完成情况")
+    st.subheader("配套课程完成情况")
     for course in COURSES:
         unlocked = course_is_unlocked(repository, course["id"])
         learning_status = course_learning_status(repository, course["id"])

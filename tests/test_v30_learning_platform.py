@@ -29,7 +29,7 @@ def test_v30_navigation_separates_learning_practice_and_training():
     for phrase in (
         "按教材学习", "练习中心", "虚拟实训中心",
         "故障诊断是实训方式之一", "诊断功能是虚拟实训的一部分",
-        "📖 学习", "🧠 知识", "✍️ 练习", "🧰 实训", "📊 我的学习",
+        "🏠 学习首页", "📚 教材中心", "🧠 知识", "✍️ 练习", "🧰 实训", "📊 我的学习",
     ):
         assert phrase in app
     assert "BOOK_EDITION_MAPPINGS" in app and "topics_for_book_chapter" in app
