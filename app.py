@@ -60,6 +60,7 @@ from dianzhentong.curriculum_catalog import (
     BOOK_EDITION_MAPPINGS, KNOWLEDGE_TOPICS, LEARNING_DOMAINS,
     topics_for_book_chapter,
 )
+from dianzhentong.textbook_learning import lesson_for_topic
 from dianzhentong.star_delta_learning import (
     STAR_DELTA_STAGES, build_star_delta_course_summary,
     diagram_choice_feedback, star_delta_summary_text,
@@ -95,7 +96,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.4"
+UI_STATE_VERSION = "3.5"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -1773,6 +1774,11 @@ elif stage == 20:
     learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
     learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
     st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
+    unit_minutes = sum((lesson_for_topic(topic["id"]) or {}).get("minutes", 2) for topic in topics)
+    st.caption(f"本单元共 {len(topics)} 个知识点 · 预计学习 {unit_minutes} 分钟")
+    first_unlearned = next((topic["id"] for topic in topics if topic["id"] not in learned_topic_ids), topics[0]["id"])
+    if st.button("继续本单元学习" if learned_count else "开始本单元学习", type="primary", use_container_width=True):
+        open_textbook_topic(selected_book_id, chapter_index, first_unlearned); st.rerun()
     st.markdown("### 本单元知识点")
     topic_columns = st.columns(2)
     for index, topic in enumerate(topics):
@@ -1832,15 +1838,32 @@ elif stage == 24:
                 topic_id = topic_ids[0]
                 st.session_state.textbook_context["topic_id"] = topic_id
             card = KNOWLEDGE_CARDS[topic_id]
+            lesson = lesson_for_topic(topic_id)
             topic_index = topic_ids.index(topic_id)
             st.markdown('<div class="dzt-section-label">Textbook lesson</div>', unsafe_allow_html=True)
             st.caption(f"{book['title']}  ›  {mapped_chapter['title']}  ›  知识点 {topic_index + 1}/{len(topic_ids)}")
             st.subheader(card["title"])
-            st.info(f"**核心原理：** {card['principle']}")
-            st.markdown("### 理解这个知识点")
-            st.write(card["role"])
-            st.success(f"**正确理解：** {card['normal']}")
-            st.warning(f"**常见误区：** {card['abnormal']}")
+            if lesson:
+                st.caption(f"预计学习 {lesson['minutes']} 分钟")
+                st.info(lesson["lead"])
+                st.markdown("### 本节要点")
+                for point in lesson["points"]:
+                    st.write(f"- {point}")
+                st.markdown("### 放到控制过程里理解")
+                st.write(lesson["example"])
+                st.markdown("### 即时检查")
+                check_key = f"textbook_check_{book_id}_{chapter_index}_{topic_id}"
+                answer = st.radio(lesson["question"], lesson["options"], index=None, key=check_key)
+                if answer == lesson["answer"]:
+                    st.success(f"回答正确。{lesson['explanation']}")
+                elif answer:
+                    st.warning(f"再想一想。{lesson['explanation']}")
+            else:
+                st.info(f"**核心原理：** {card['principle']}")
+                st.markdown("### 理解这个知识点")
+                st.write(card["role"])
+                st.success(f"**正确理解：** {card['normal']}")
+                st.warning(f"**常见误区：** {card['abnormal']}")
             st.markdown("### 学习小结")
             st.write(card["review"])
             render_provenance(provenance_for_card(topic_id))
@@ -1848,10 +1871,13 @@ elif stage == 24:
             learned = set().union(*(repository.learned_cards(item) for item in catalog))
             if topic_id in learned:
                 st.success("这个知识点已标记为学过，可以继续复习。")
-            elif st.button("标记为已学习", type="primary", use_container_width=True):
+            elif st.button("完成本节学习", type="primary", use_container_width=True,
+                           disabled=bool(lesson and st.session_state.get(f"textbook_check_{book_id}_{chapter_index}_{topic_id}") != lesson["answer"])):
                 repository.save_activity(make_learning_activity(activity_experiment_id, "knowledge_card", topic_id))
                 st.success("已记录教材学习进度。")
                 st.rerun()
+            if lesson and topic_id not in learned:
+                st.caption("完成即时检查后即可记录本节进度。")
             lesson_actions = st.columns(2)
             if topic_index + 1 < len(topic_ids):
                 if lesson_actions[0].button("下一个知识点", type="primary", use_container_width=True):

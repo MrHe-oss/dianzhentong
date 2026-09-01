@@ -75,6 +75,6 @@ def test_v28_sources_version_and_ui_guards():
     assert {"abb_time_relay", "schneider_time_relay"} <= set(SOURCES)
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'UI_STATE_VERSION = "3.4"' in app and 'APP_VERSION = "3.4"' in config
+    assert 'UI_STATE_VERSION = "3.5"' in app and 'APP_VERSION = "3.5"' in config
     assert "时间过程状态演示" in app and "demos_for_chapter" in app
     assert "st.dataframe" not in app and "st.table" not in app
