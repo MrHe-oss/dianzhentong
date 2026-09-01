@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .course import COURSE_CHAPTERS, COURSES
+from .content_loader import load_textbook_content
 from .learning import KNOWLEDGE_CARDS
 
 
@@ -30,56 +31,18 @@ KNOWLEDGE_TOPICS: dict[str, dict[str, Any]] = {
 }
 
 
-# 教材只用于公开目录与平台原创内容之间的索引；不收录教材正文、插图或课后题。
+# 教材映射来自结构化内容文件；不收录教材正文、插图或课后题。
+_TEXTBOOK_CONTENT = load_textbook_content("electrical_control_plc_s71200_tong")
+_BOOK = _TEXTBOOK_CONTENT["book"]
 BOOK_EDITION_MAPPINGS: dict[str, dict[str, Any]] = {
-    "electrical_control_plc_s71200_tong": {
-        "id": "electrical_control_plc_s71200_tong",
-        "title": "电气控制与PLC应用技术（S7-1200）",
-        "edition": "第1版",
-        "author": "童克波",
-        "publisher": "机械工业出版社",
-        "isbn": "978-7-111-73129-0",
-        "published_at": "2023-07-24",
-        "source_url": "https://www.cmpedu.com/books/book/5606823.htm",
-        "official": False,
-        "notice": "本学习映射由电诊通独立开发，属于非出版社官方配套内容，不是机械工业出版社或教材作者提供的资源。",
-        "course_ids": (
-            "low_voltage_control_basics",
-            "relay_contactor_control",
-            "electrical_diagram_reading",
-            "star_delta_starting",
-            "time_relay_sequence_control",
-        ),
-        "chapters": (
-            {
-                "source_title": "项目1·任务1 实现电动机的单向旋转",
-                "title": "电动机单向旋转控制",
-                "goal": "识别公共条件、操作请求、执行角色及点动和连续运行关系。",
-                "topic_ids": ("control_power", "fuse", "thermal_relay", "button_contacts", "contactor_coil", "jog_control", "self_hold", "series_logic"),
-                "case_ids": ("dol_roles", "jog_roles", "dol_series", "hold_parallel"),
-                "experiment_ids": ("motor_dol_no_start", "motor_jog_continuous"),
-                "quiz_chapter_ids": ("components", "direct_start", "jog_continuous_basics"),
-            },
-            {
-                "source_title": "项目1·任务2 实现电动机的正反转控制",
-                "title": "电动机正反转控制",
-                "goal": "理解方向支路、公共条件和电气互锁的逻辑关系。",
-                "topic_ids": ("forward_reverse", "electrical_interlock", "parallel_logic", "logic_tracing"),
-                "case_ids": ("reverse_common", "reverse_branch"),
-                "experiment_ids": ("motor_forward_reverse",),
-                "quiz_chapter_ids": ("forward_reverse", "control_path_tracing"),
-            },
-            {
-                "source_title": "项目1·任务3 实现电动机星—三角减压启动控制",
-                "title": "星—三角减压启动控制",
-                "goal": "理解启动目的、三个接触器角色、时间转换和互锁约束。",
-                "topic_ids": ("star_delta_principle", "star_delta_components", "star_delta_timing", "star_delta_interlock", "timer_role", "on_delay"),
-                "case_ids": ("sd_purpose", "sd_suitability", "sd_roles", "sd_timer", "sd_sequence", "sd_interlock"),
-                "experiment_ids": tuple(),
-                "quiz_chapter_ids": ("star_delta_principles", "star_delta_components", "star_delta_sequence"),
-            },
-        ),
-    },
+    _BOOK["id"]: {
+        **_BOOK,
+        "course_ids": tuple(_BOOK["course_ids"]),
+        "chapters": tuple({
+            key: tuple(value) if key in {"topic_ids", "case_ids", "experiment_ids", "quiz_chapter_ids"} else value
+            for key, value in unit.items() if key not in {"id", "topics", "worked_example"}
+        } for unit in _TEXTBOOK_CONTENT["project"]["units"]),
+    }
 }
 
 
