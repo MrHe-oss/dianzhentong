@@ -21,7 +21,7 @@ def test_all_learning_content_is_traceable():
 def test_sources_have_auditable_metadata_and_no_vague_labels():
     for source in SOURCES.values():
         assert source["url"].startswith("https://")
-        assert source["publisher"] in {"ABB", "Schneider Electric"}
+        assert source["publisher"] in {"ABB", "Schneider Electric", "Siemens"}
         assert source["checked_on"] == "2026-08-31"
         assert source["scope"]
         assert "某教材" not in source["title"] and "网络资料" not in source["title"]

@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "book": {
+    "id": "electrical_control_plc_s71200_tong",
+    "title": "电气控制与PLC应用技术（S7-1200）",
+    "edition": "第1版",
+    "author": "童克波",
+    "publisher": "机械工业出版社",
+    "isbn": "978-7-111-73129-0",
+    "published_at": "2023-07-24",
+    "source_url": "https://www.cmpedu.com/books/book/5606823.htm",
+    "official": false,
+    "notice": "本学习映射由电诊通独立开发，项目与任务名称依据出版社公开目录；讲解、例题与练习均为平台原创，并非出版社官方配套内容。",
+    "course_ids": ["low_voltage_control_basics", "relay_contactor_control", "electrical_diagram_reading", "star_delta_starting", "time_relay_sequence_control"]
+  },
+  "project": {
+    "id": "project_2",
+    "title": "项目2 初识S7-1200 PLC",
+    "units": [
+      {
+        "id": "p2_unit_1",
+        "source_title": "项目2·任务1 认识S7-1200 PLC硬件系统",
+        "title": "认识S7-1200 PLC硬件系统",
+        "goal": "从系统角色出发，区分CPU、信号模块和通信模块的基本职责。",
+        "topic_ids": ["plc_system_role", "plc_cpu", "plc_modules"],
+        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "worked_example": {
+          "title": "原创例题：硬件角色分类",
+          "scenario": "某抽象控制系统需要读取开关状态、执行逻辑并与另一控制单元交换信息。应如何按功能划分角色？",
+          "steps": ["把读取到的现场状态归入输入信息。", "把程序执行与系统协调归入CPU职责。", "把额外信号处理和信息交换分别归入信号扩展与通信能力。"],
+          "answer": "先按输入、核心处理、输出和扩展通信划分功能，再讨论具体模块。",
+          "practice": "负责执行用户程序的核心角色是？",
+          "options": ["CPU", "任意信号模块", "所有外部按钮"], "practice_answer": "CPU",
+          "practice_explanation": "CPU承担程序执行和系统协调等核心任务。"
+        },
+        "topics": [
+          {"id":"plc_system_role","lesson":{"minutes":4,"lead":"PLC不是孤立设备，而是输入、逻辑处理与输出关系中的控制核心。","points":["输入侧提供状态或请求信息。","CPU按程序处理信息。","输出侧接收逻辑结果，扩展模块补充系统能力。"],"example":"按钮状态属于输入信息，程序判断属于处理环节，指示结果属于输出信息。","question":"PLC控制系统的基本信息链是？","options":["输入—处理—输出","输出—外观—价格","接线—送电—维修"],"answer":"输入—处理—输出","explanation":"入门分析先建立输入、处理和输出的功能链。"},"formulas":[]},
+          {"id":"plc_cpu","lesson":{"minutes":4,"lead":"CPU是S7-1200硬件系统的核心控制单元。","points":["执行用户程序。","协调数据与系统运行。","与扩展模块共同构成目标控制系统。"],"example":"同一工程中，CPU负责逻辑处理，而扩展模块负责增加特定接口能力。","question":"CPU与信号模块的主要区别是？","options":["CPU负责核心程序执行","信号模块一定执行完整用户程序","二者没有功能区别"],"answer":"CPU负责核心程序执行","explanation":"CPU与扩展模块在系统中的职责不同。"},"formulas":[]},
+          {"id":"plc_modules","lesson":{"minutes":4,"lead":"模块应按功能理解，不应只凭外观记忆。","points":["信号模块扩展输入输出能力。","通信模块扩展信息交换能力。","模块选择取决于任务需求和官方兼容信息。"],"example":"若任务需要额外处理现场信号，应先分析信号类型与数量，而不是只看模块外形。","question":"区分模块时首先应关注什么？","options":["功能与任务需求","外壳颜色","网页显示顺序"],"answer":"功能与任务需求","explanation":"功能分类比外观记忆更可靠。"},"formulas":[]}
+        ]
+      },
+      {
+        "id": "p2_unit_2",
+        "source_title": "项目2·任务2 S7-1200 PLC程序设计基础学习",
+        "title": "PLC程序设计基础",
+        "goal": "理解程序循环、变量与数据类型，以及逻辑网络的组织方式。",
+        "topic_ids": ["plc_program_cycle", "plc_variables", "plc_logic_structure"],
+        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "worked_example": {
+          "title": "原创例题：从控制要求到逻辑网络",
+          "scenario": "一个教学任务要求：允许条件成立且启动请求出现时产生运行请求，停止条件出现时撤销。如何组织分析？",
+          "steps": ["先定义允许、启动、停止和运行等变量含义。", "把建立运行请求与撤销运行请求拆成可解释条件。", "检查每个变量的数据类型和逻辑网络目标。"],
+          "answer": "先定义变量，再拆分逻辑，最后检查条件与结果是否一致。",
+          "practice": "程序设计前最适合先明确什么？",
+          "options": ["控制要求与变量含义", "真实端子接线", "设备外观"], "practice_answer": "控制要求与变量含义",
+          "practice_explanation": "清晰的对象和变量定义是可读逻辑的基础。"
+        },
+        "topics": [
+          {"id":"plc_program_cycle","lesson":{"minutes":5,"lead":"PLC通过重复循环处理输入信息和程序逻辑。","points":["读取输入形成当前状态信息。","按顺序执行用户程序。","把处理结果反映到输出状态并进入下一循环。"],"example":"输入改变后，需要经过程序处理阶段，相关输出逻辑才会得到新的结果。","question":"PLC程序循环是否通常只执行一次？","options":["不是，会持续循环","是，只执行一次","只有断电时执行"],"answer":"不是，会持续循环","explanation":"PLC通常循环处理输入、程序和输出。"},"formulas":[{"title":"抽象循环关系","expression":"Y_{k+1}=F(X_k,S_k)","symbols":["X：当前输入信息","S：当前内部状态","Y：本轮逻辑结果"],"meaning":"该式仅表达离散循环中的信息关系，不代表真实扫描细节或接线。"}]},
+          {"id":"plc_variables","lesson":{"minutes":5,"lead":"变量名称说明对象身份，数据类型说明数据能表达什么。","points":["布尔量适合表达真或假状态。","数值类型用于表示不同范围与精度的数据。","变量名称应反映用途并保持一致。"],"example":"运行允许可用布尔状态表达，而计数值需要数值类型表达。","question":"为什么要为变量指定数据类型？","options":["约束数据含义和可用操作","改变设备颜色","替代需求分析"],"answer":"约束数据含义和可用操作","explanation":"数据类型决定变量可表达的数据和允许的操作。"},"formulas":[]},
+          {"id":"plc_logic_structure","lesson":{"minutes":5,"lead":"把复杂要求拆成目标明确的小逻辑网络更容易检查。","points":["每个网络应有清晰目的。","条件与结果使用语义化变量。","注释说明为什么这样设计，而不仅是做了什么。"],"example":"公共允许条件、启动请求和停止逻辑可以分层组织，便于逐项复盘。","question":"提高程序可读性的合适做法是？","options":["拆分逻辑并使用清晰命名","把全部逻辑堆在一起","删除所有说明"],"answer":"拆分逻辑并使用清晰命名","explanation":"结构化组织便于理解、检查和维护。"},"formulas":[]}
+        ]
+      },
+      {
+        "id": "p2_unit_3",
+        "source_title": "项目2·任务3 TIA博途编程软件使用",
+        "title": "TIA博途软件基础",
+        "goal": "理解项目、设备、程序块和变量表之间的工程组织关系。",
+        "topic_ids": ["tia_project", "tia_device_config", "tia_program_blocks"],
+        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "worked_example": {
+          "title": "原创例题：工程对象归类",
+          "scenario": "某离线教学工程包含控制器描述、逻辑程序和一组命名变量。它们应归入什么层次？",
+          "steps": ["用项目作为全部工程信息的容器。", "把控制器及模块描述归入设备层。", "把逻辑与变量分别放入程序块和变量管理对象。"],
+          "answer": "项目统一组织设备、程序块和变量等工程对象。",
+          "practice": "承载控制逻辑的主要工程对象是？",
+          "options": ["程序块", "项目标题", "软件窗口颜色"], "practice_answer": "程序块",
+          "practice_explanation": "程序块用于组织和承载控制逻辑。"
+        },
+        "topics": [
+          {"id":"tia_project","lesson":{"minutes":4,"lead":"TIA博途工程项目是组织设备与程序信息的容器。","points":["项目保存工程对象之间的关系。","设备描述和程序逻辑属于不同对象。","工程命名应清楚反映教学任务。"],"example":"同一个项目可以同时包含控制器描述、程序块和变量定义。","question":"项目在工程中的作用是？","options":["统一组织工程对象","替代所有硬件","直接证明逻辑正确"],"answer":"统一组织工程对象","explanation":"项目提供工程信息的组织边界。"},"formulas":[]},
+          {"id":"tia_device_config","lesson":{"minutes":4,"lead":"设备组态用于描述工程中的控制器和模块构成。","points":["组态对象应与目标系统需求一致。","硬件描述与程序逻辑相互关联但职责不同。","本平台不提供真实设备添加或下载步骤。"],"example":"程序使用某类信号前，应先从工程模型层确认是否存在相应能力。","question":"设备组态主要描述什么？","options":["控制器与模块构成","学生身份","真实维修结论"],"answer":"控制器与模块构成","explanation":"组态用于建立工程中的硬件描述。"},"formulas":[]},
+          {"id":"tia_program_blocks","lesson":{"minutes":4,"lead":"程序块与变量表共同提升程序组织和阅读效率。","points":["程序块承载逻辑。","变量表集中管理名称和数据类型。","命名与注释应帮助读者理解控制意图。"],"example":"把“启动允许”作为清晰变量名，比使用无法解释的临时名称更利于复盘。","question":"变量表最主要的学习价值是？","options":["统一管理变量定义","替代程序逻辑","完成真实接线"],"answer":"统一管理变量定义","explanation":"变量表帮助集中维护名称、类型和含义。"},"formulas":[]}
+        ]
+      },
+      {
+        "id": "p2_unit_4",
+        "source_title": "项目2·任务4 简单项目的建立与运行",
+        "title": "简单PLC项目流程",
+        "goal": "建立需求分析、工程组织、逻辑检查与安全复盘的完整学习流程。",
+        "topic_ids": ["plc_project_flow", "plc_compile_check", "plc_monitoring_boundary"],
+        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "worked_example": {
+          "title": "原创例题：项目检查顺序",
+          "scenario": "一个离线教学项目已经写出逻辑，但变量含义不清，也尚未检查编译信息。下一步应如何处理？",
+          "steps": ["回到需求和变量定义，确认每个对象的含义。", "执行工程一致性与编译检查并处理提示。", "用模拟资料验证逻辑，再记录结果和安全边界。"],
+          "answer": "先保证定义与工程一致，再进行模拟逻辑复盘，不能直接用于真实设备。",
+          "practice": "编译通过能否证明控制需求完全正确？",
+          "options": ["不能", "一定能", "与程序无关"], "practice_answer": "不能",
+          "practice_explanation": "编译检查主要验证工程内部规则，仍需验证控制逻辑和安全要求。"
+        },
+        "topics": [
+          {"id":"plc_project_flow","lesson":{"minutes":5,"lead":"简单项目也应从需求出发，而不是从堆叠指令开始。","points":["明确输入、输出与控制目标。","建立设备、变量和程序的工程对象。","检查、模拟验证并形成复盘记录。"],"example":"先写出“何时允许、何时动作、何时退出”，再把要求转成变量和逻辑。","question":"简单项目的合理起点是？","options":["需求与控制目标","随意选择指令","真实设备送电"],"answer":"需求与控制目标","explanation":"需求决定变量、逻辑和验证目标。"},"formulas":[]},
+          {"id":"plc_compile_check","lesson":{"minutes":5,"lead":"编译检查与逻辑验证解决的是不同问题。","points":["编译可发现结构、引用和类型等问题。","编译通过不等于控制逻辑正确。","警告信息也应阅读并判断影响。"],"example":"一个条件写反的程序可能仍能通过编译，但不符合控制需求。","question":"编译通过意味着什么？","options":["工程满足基本编译规则","控制逻辑必然正确","可以直接控制真实设备"],"answer":"工程满足基本编译规则","explanation":"逻辑正确性和安全性仍需独立验证。"},"formulas":[]},
+          {"id":"plc_monitoring_boundary","lesson":{"minutes":5,"lead":"监控与调试学习必须明确离线模拟和真实设备之间的边界。","points":["平台只观察模拟变量与逻辑结果。","不提供下载、送电或变量强制操作指导。","真实系统必须遵守设备说明书、风险评估和现场规程。"],"example":"发现模拟结果异常时，应回到需求和程序逻辑复盘，而不是对真实设备进行试探操作。","question":"本平台中的监控内容可用于什么？","options":["离线教学观察","直接控制真实生产设备","替代现场安全规程"],"answer":"离线教学观察","explanation":"电诊通只提供教学模拟，不连接或控制真实设备。"},"formulas":[]}
+        ]
+      }
+    ]
+  }
+}

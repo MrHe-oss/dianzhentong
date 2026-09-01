@@ -22,12 +22,13 @@ def test_real_textbook_metadata_comes_from_publisher_listing():
 
 def test_project_one_has_three_complete_original_learning_mappings():
     book = BOOK_EDITION_MAPPINGS[BOOK_ID]
-    assert len(book["chapters"]) == 3
-    assert [chapter["title"] for chapter in book["chapters"]] == [
+    project_one = [chapter for chapter in book["chapters"] if chapter["project_id"] == "project_1"]
+    assert len(project_one) == 3
+    assert [chapter["title"] for chapter in project_one] == [
         "电动机单向旋转控制", "电动机正反转控制", "星—三角减压启动控制",
     ]
     catalog = KnowledgeBase.catalog()
-    for index, chapter in enumerate(book["chapters"]):
+    for index, chapter in enumerate(project_one):
         assert topics_for_book_chapter(BOOK_ID, index)
         assert set(chapter["case_ids"]) <= set(DIAGRAM_CASES)
         assert set(chapter["experiment_ids"]) <= set(catalog)

@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from .content_loader import load_textbook_content
+from .content_loader import load_textbook_projects
 
 
 BOOK_ID = "electrical_control_plc_s71200_tong"
-_CONTENT = load_textbook_content(BOOK_ID)
-_UNITS = _CONTENT["project"]["units"]
+_CONTENTS = load_textbook_projects(BOOK_ID)
+_UNITS = tuple(unit for content in _CONTENTS for unit in content["project"]["units"])
 
 SAMPLE_UNIT_TOPIC_IDS = tuple(_UNITS[0]["topic_ids"])
 ALL_LESSON_TOPIC_IDS = tuple(topic_id for unit in _UNITS for topic_id in unit["topic_ids"])

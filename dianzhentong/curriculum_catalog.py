@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .course import COURSE_CHAPTERS, COURSES
-from .content_loader import load_textbook_content
+from .content_loader import load_textbook_projects
 from .learning import KNOWLEDGE_CARDS
 
 
@@ -32,16 +32,20 @@ KNOWLEDGE_TOPICS: dict[str, dict[str, Any]] = {
 
 
 # 教材映射来自结构化内容文件；不收录教材正文、插图或课后题。
-_TEXTBOOK_CONTENT = load_textbook_content("electrical_control_plc_s71200_tong")
+_TEXTBOOK_PROJECTS = load_textbook_projects("electrical_control_plc_s71200_tong")
+_TEXTBOOK_CONTENT = _TEXTBOOK_PROJECTS[0]
 _BOOK = _TEXTBOOK_CONTENT["book"]
 BOOK_EDITION_MAPPINGS: dict[str, dict[str, Any]] = {
     _BOOK["id"]: {
         **_BOOK,
         "course_ids": tuple(_BOOK["course_ids"]),
+        "projects": tuple({"id": item["project"]["id"], "title": item["project"]["title"]}
+                          for item in _TEXTBOOK_PROJECTS),
         "chapters": tuple({
-            key: tuple(value) if key in {"topic_ids", "case_ids", "experiment_ids", "quiz_chapter_ids"} else value
-            for key, value in unit.items() if key not in {"id", "topics", "worked_example"}
-        } for unit in _TEXTBOOK_CONTENT["project"]["units"]),
+            **{key: tuple(value) if key in {"topic_ids", "case_ids", "experiment_ids", "quiz_chapter_ids"} else value
+               for key, value in unit.items() if key not in {"id", "topics"}},
+            "project_id": content["project"]["id"], "project_title": content["project"]["title"],
+        } for content in _TEXTBOOK_PROJECTS for unit in content["project"]["units"]),
     }
 }
 
@@ -58,8 +62,6 @@ def topics_for_book_chapter(book_id: str, chapter_index: int) -> tuple[dict[str,
 
 def validate_curriculum_catalog() -> None:
     course_ids = {course["id"] for course in COURSES}
-    if any(not topic["course_ids"] for topic in KNOWLEDGE_TOPICS.values()):
-        raise ValueError("存在未关联课程的统一知识点")
     for book_id, book in BOOK_EDITION_MAPPINGS.items():
         if not set(book["course_ids"]) <= course_ids or not book["chapters"]:
             raise ValueError(f"教材映射课程无效：{book_id}")
@@ -68,7 +70,7 @@ def validate_curriculum_catalog() -> None:
         topic_ids = [topic_id for chapter in book["chapters"] for topic_id in chapter["topic_ids"]]
         if len(topic_ids) != len(set(topic_ids)) or not set(topic_ids) <= set(KNOWLEDGE_TOPICS):
             raise ValueError(f"教材映射知识点无效：{book_id}")
-        if any(not all(chapter.get(field) for field in ("source_title", "title", "goal", "topic_ids", "case_ids", "quiz_chapter_ids"))
+        if any(not all(chapter.get(field) for field in ("source_title", "title", "goal", "topic_ids"))
                for chapter in book["chapters"]):
             raise ValueError(f"教材章节映射不完整：{book_id}")
 

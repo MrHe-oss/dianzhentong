@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .content_loader import load_textbook_content
+from .content_loader import load_textbook_projects
 
 
-_UNITS = load_textbook_content("electrical_control_plc_s71200_tong")["project"]["units"]
+_UNITS = tuple(unit for content in load_textbook_projects("electrical_control_plc_s71200_tong")
+               for unit in content["project"]["units"])
 LOGIC_FORMULAS: dict[str, tuple[dict[str, Any], ...]] = {
     topic["id"]: tuple(topic.get("formulas", []))
     for unit in _UNITS for topic in unit["topics"] if topic.get("formulas")

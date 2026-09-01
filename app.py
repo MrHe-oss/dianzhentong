@@ -102,8 +102,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.2"
-STORAGE_CACHE_VERSION = "4.2-review-notebook"
+UI_STATE_VERSION = "4.3"
+STORAGE_CACHE_VERSION = "4.3-textbook-project2"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -1891,12 +1891,12 @@ elif stage == 20:
     book_metrics = st.columns(3)
     book_metrics[0].metric("作者", book["author"])
     book_metrics[1].metric("出版社", book["publisher"])
-    book_metrics[2].metric("试点单元", len(book["chapters"]))
+    book_metrics[2].metric("已上线项目", len(book.get("projects", ())))
     st.write(f"**ISBN：** {book['isbn']} · **出版时间：** {book['published_at']}")
     st.link_button("查看出版社公开书目信息", book["source_url"], use_container_width=True)
     st.caption(book["notice"])
     learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
-    st.markdown("### 项目1学习进度")
+    st.markdown("### 教材项目学习进度")
     unit_rows = []
     all_book_topic_ids = []
     completed_case_ids = {item["case_id"] for item in repository.diagram_history(limit=1000)}
@@ -1905,9 +1905,12 @@ elif stage == 20:
         all_book_topic_ids.extend(unit_topic_ids)
         completed = sum(topic_id in learned_topic_ids for topic_id in unit_topic_ids)
         knowledge_done = completed == len(unit_topic_ids)
+        has_assessment = bool(unit["quiz_chapter_ids"])
         assessment_done = any(repository.quiz_summary(item)["passed_count"] for item in unit["quiz_chapter_ids"])
         diagram_done = bool(set(unit["case_ids"]) & completed_case_ids)
-        if knowledge_done and assessment_done and diagram_done:
+        if knowledge_done and not has_assessment:
+            unit_status = "知识完成"
+        elif knowledge_done and assessment_done and diagram_done:
             unit_status = "基本掌握"
         elif knowledge_done:
             unit_status = "待评测" if not assessment_done else "待识图巩固"
@@ -1916,18 +1919,18 @@ elif stage == 20:
         else:
             unit_status = "未开始"
         unit_rows.append({
-            "单元": f"{index + 1}. {unit['title']}",
+            "项目": unit["project_title"], "单元": unit['title'],
             "知识点": f"{completed}/{len(unit_topic_ids)}",
             "状态": unit_status,
         })
-    render_markdown_table(["单元", "知识点", "状态"], unit_rows)
+    render_markdown_table(["项目", "单元", "知识点", "状态"], unit_rows)
     project_completed = sum(topic_id in learned_topic_ids for topic_id in all_book_topic_ids)
-    st.progress(project_completed / len(all_book_topic_ids), text=f"项目1知识学习 {project_completed}/{len(all_book_topic_ids)}")
+    st.progress(project_completed / len(all_book_topic_ids), text=f"教材知识学习 {project_completed}/{len(all_book_topic_ids)}")
     if project_completed == len(all_book_topic_ids):
-        st.success("项目1三个单元的知识小课已完成。建议完成各单元5题练习、互动识图和配套实训进行巩固。")
+        st.success("当前上线教材项目的知识小课已完成。可继续使用已有配套练习、识图和实训进行巩固。")
     chapter_index = st.selectbox(
         "选择章节", range(len(book["chapters"])),
-        format_func=lambda item: f"第{item + 1}单元 · {book['chapters'][item]['title']}",
+        format_func=lambda item: f"{book['chapters'][item]['project_title']} · {book['chapters'][item]['title']}",
         key="selected_textbook_chapter",
     )
     mapped_chapter = book["chapters"][chapter_index]
@@ -1939,7 +1942,7 @@ elif stage == 20:
     topics = topics_for_book_chapter(selected_book_id, chapter_index)
     learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
     st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
-    learning_effect = textbook_unit_effect(selected_book_id, chapter_index)
+    learning_effect = textbook_unit_effect(selected_book_id, chapter_index) if mapped_chapter["quiz_chapter_ids"] else {"before": None, "after": None, "improvement": None}
     if learning_effect["before"] is not None:
         effect_columns = st.columns(2)
         effect_columns[0].metric("学前小测", f"{learning_effect['before']:.0%}")
@@ -1972,22 +1975,27 @@ elif stage == 20:
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
     action_columns[0].markdown("**单元评测**")
-    if learning_effect["before"] is None:
+    if not mapped_chapter["quiz_chapter_ids"]:
+        action_columns[0].caption("本项目专项题库将在后续版本加入；当前可完成每节即时检查与原创变式练习。")
+    elif learning_effect["before"] is None:
         action_columns[0].caption("先完成3题学前小测，不计入掌握成绩。")
         if action_columns[0].button("开始学前小测", key=f"book_pretest_start_{chapter_index}", use_container_width=True):
             start_textbook_unit_assessment(selected_book_id, chapter_index, pretest=True); st.rerun()
     else:
         action_columns[0].caption("学后随机5题，答对至少4题通过。")
     if action_columns[0].button("开始学后评测", key=f"book_quiz_start_{chapter_index}",
-                                disabled=learning_effect["before"] is None, use_container_width=True):
+                                disabled=(not mapped_chapter["quiz_chapter_ids"] or learning_effect["before"] is None), use_container_width=True):
         start_textbook_unit_assessment(selected_book_id, chapter_index); st.rerun()
-    case_id = action_columns[1].selectbox(
-        "互动识图", mapped_chapter["case_ids"],
-        format_func=lambda item: DIAGRAM_CASES[item]["title"],
-        key=f"book_case_{selected_book_id}_{chapter_index}",
-    )
-    if action_columns[1].button("开始互动识图", key=f"book_case_start_{chapter_index}", use_container_width=True):
-        start_diagram_training(case_id); st.rerun()
+    if mapped_chapter["case_ids"]:
+        case_id = action_columns[1].selectbox(
+            "互动识图", mapped_chapter["case_ids"],
+            format_func=lambda item: DIAGRAM_CASES[item]["title"],
+            key=f"book_case_{selected_book_id}_{chapter_index}",
+        )
+        if action_columns[1].button("开始互动识图", key=f"book_case_start_{chapter_index}", use_container_width=True):
+            start_diagram_training(case_id); st.rerun()
+    else:
+        action_columns[1].info("本项目互动训练正在建设，当前先完成知识学习。")
     experiment_ids = mapped_chapter["experiment_ids"]
     if experiment_ids:
         mapped_experiment_id = action_columns[2].selectbox(

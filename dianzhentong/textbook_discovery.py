@@ -3,46 +3,49 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from .content_loader import load_textbook_content
+from .content_loader import load_textbook_projects
 
 
 def build_textbook_index(book_ids: Iterable[str]) -> tuple[dict[str, Any], ...]:
     """把教材、单元、知识点、公式和原创例题整理成可搜索条目。"""
     entries: list[dict[str, Any]] = []
     for book_id in book_ids:
-        content = load_textbook_content(book_id)
-        book = content["book"]
+        projects = load_textbook_projects(book_id)
+        book = projects[0]["book"]
         entries.append({
             "kind": "教材", "book_id": book_id, "chapter_index": 0, "topic_id": None,
             "title": book["title"], "subtitle": f"{book['author']} · {book['publisher']}",
             "search_text": " ".join(str(book.get(key, "")) for key in ("title", "author", "publisher", "isbn")),
         })
-        for chapter_index, unit in enumerate(content["project"]["units"]):
-            entries.append({
-                "kind": "单元", "book_id": book_id, "chapter_index": chapter_index, "topic_id": None,
-                "title": unit["title"], "subtitle": unit["goal"],
-                "search_text": f"{book['title']} {unit['source_title']} {unit['title']} {unit['goal']}",
-            })
-            for topic in unit["topics"]:
-                lesson = topic["lesson"]
-                search_parts = [book["title"], unit["title"], topic["id"], lesson["lead"], lesson["example"]]
-                search_parts.extend(lesson["points"])
-                search_parts.extend(
-                    f"{formula['title']} {formula['meaning']} {' '.join(formula['symbols'])}"
-                    for formula in topic.get("formulas", [])
-                )
+        chapter_index = 0
+        for content in projects:
+            for unit in content["project"]["units"]:
                 entries.append({
-                    "kind": "知识点", "book_id": book_id, "chapter_index": chapter_index,
-                    "topic_id": topic["id"], "title": topic.get("title") or topic["id"],
-                    "subtitle": lesson["lead"], "search_text": " ".join(search_parts),
+                    "kind": "单元", "book_id": book_id, "chapter_index": chapter_index, "topic_id": None,
+                    "title": unit["title"], "subtitle": unit["goal"],
+                    "search_text": f"{book['title']} {unit['source_title']} {unit['title']} {unit['goal']}",
                 })
-            example = unit["worked_example"]
-            entries.append({
-                "kind": "原创例题", "book_id": book_id, "chapter_index": chapter_index,
-                "topic_id": unit["topic_ids"][0], "title": example["title"],
-                "subtitle": example["scenario"],
-                "search_text": " ".join([example["title"], example["scenario"], example["answer"], *example["steps"]]),
-            })
+                for topic in unit["topics"]:
+                    lesson = topic["lesson"]
+                    search_parts = [book["title"], unit["title"], topic["id"], lesson["lead"], lesson["example"]]
+                    search_parts.extend(lesson["points"])
+                    search_parts.extend(
+                        f"{formula['title']} {formula['meaning']} {' '.join(formula['symbols'])}"
+                        for formula in topic.get("formulas", [])
+                    )
+                    entries.append({
+                        "kind": "知识点", "book_id": book_id, "chapter_index": chapter_index,
+                        "topic_id": topic["id"], "title": topic.get("title") or topic["id"],
+                        "subtitle": lesson["lead"], "search_text": " ".join(search_parts),
+                    })
+                example = unit["worked_example"]
+                entries.append({
+                    "kind": "原创例题", "book_id": book_id, "chapter_index": chapter_index,
+                    "topic_id": unit["topic_ids"][0], "title": example["title"],
+                    "subtitle": example["scenario"],
+                    "search_text": " ".join([example["title"], example["scenario"], example["answer"], *example["steps"]]),
+                })
+                chapter_index += 1
     return tuple(entries)
 
 

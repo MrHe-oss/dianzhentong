@@ -50,6 +50,6 @@ def test_review_notebook_exports_are_anonymous_and_readable():
 def test_v42_ui_has_notes_review_notebook_and_exports():
     app = open("app.py", encoding="utf-8").read()
     config = open("dianzhentong/config.py", encoding="utf-8").read()
-    assert 'APP_VERSION = "4.2"' in config and 'UI_STATE_VERSION = "4.2"' in app
+    assert 'APP_VERSION = "4.3"' in config and 'UI_STATE_VERSION = "4.3"' in app
     for phrase in ("我的学习笔记", "我的复习本", "搜索个人笔记", "下载TXT笔记", "下载JSON复习本"):
         assert phrase in app

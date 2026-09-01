@@ -18,6 +18,7 @@ SOURCES: dict[str, dict[str, str]] = {
     "schneider_star_delta": {"title":"Schneider Electric TeSys Tera star-delta operation","publisher":"Schneider Electric","url":"https://productinfo.se.com/tesys_tera_ug/tesys-tera-motor-management-system-user-guide/EN/TeSys-Tera-User%20Guide-DOCA0257-01.xml/%24/W2_TeSys_Tera_UG_StarDelta_0001013349","type":"厂家电动机控制技术说明","scope":"主、星形、三角接触器角色及星—三角操作顺序","checked_on":CHECKED_ON},
     "abb_time_relay": {"title":"ABB Electronic timers CT-E range function diagrams","publisher":"ABB","url":"https://library.e.abb.com/public/252bc4401b9cf432c12570680034c4fd/2CDC110004C0203.pdf","type":"厂家时间继电器技术手册","scope":"通电延时、断电延时的动作时点与复位逻辑","checked_on":CHECKED_ON},
     "schneider_time_relay": {"title":"Schneider Electric 9050JCK timer functions FAQ","publisher":"Schneider Electric","url":"https://www.se.com/us/en/faqs/FA124951/","type":"厂家时间继电器功能说明","scope":"通电延时、断电延时和输出状态变化","checked_on":CHECKED_ON},
+    "siemens_s71200_manual": {"title":"S7-1200 Programmable Controller System Manual V4.7","publisher":"Siemens","url":"https://support.industry.siemens.com/cs/attachments/109977302/s71200_system_manual_en-US.pdf","type":"厂家系统手册","scope":"CPU、信号与通信模块、程序执行、设备组态和编程基础","checked_on":CHECKED_ON},
 }
 
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
@@ -45,6 +46,18 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "on_delay": _item("通电延时从输入形成开始计时，并在等待完成后改变输出。", ("abb_time_relay", "schneider_time_relay"), STATUS_VERIFIED),
     "off_delay": _item("断电延时从输入撤除开始计时，输出在等待完成后退出。", ("abb_time_relay", "schneider_time_relay"), STATUS_VERIFIED),
     "sequence_control": _item("顺序控制根据前序状态和时间条件允许后续阶段进入或退出。", ("abb_time_relay", "schneider_time_relay")),
+    "plc_system_role": _item("PLC系统可按输入、程序处理、输出和扩展能力理解。", ("siemens_s71200_manual",)),
+    "plc_cpu": _item("CPU承担用户程序执行和系统协调等核心任务。", ("siemens_s71200_manual",)),
+    "plc_modules": _item("信号模块和通信模块用于扩展不同类型的系统能力。", ("siemens_s71200_manual",)),
+    "plc_program_cycle": _item("CPU循环读取输入、执行用户程序并更新相关输出信息。", ("siemens_s71200_manual",)),
+    "plc_variables": _item("变量与数据类型共同描述程序数据的身份和规则。", ("siemens_s71200_manual",)),
+    "plc_logic_structure": _item("程序可通过组织块和逻辑网络进行结构化表达。", ("siemens_s71200_manual",)),
+    "tia_project": _item("TIA Portal项目用于组织设备和程序等工程对象。", ("siemens_s71200_manual",)),
+    "tia_device_config": _item("设备组态描述CPU及扩展模块等工程硬件对象。", ("siemens_s71200_manual",)),
+    "tia_program_blocks": _item("程序块承载逻辑，变量对象支持数据管理。", ("siemens_s71200_manual",)),
+    "plc_project_flow": _item("PLC项目从任务分析进入工程组织、程序设计与验证。", ("siemens_s71200_manual",)),
+    "plc_compile_check": _item("编译检查工程规则，但不能单独证明控制逻辑与安全要求正确。", ("siemens_s71200_manual",)),
+    "plc_monitoring_boundary": _item("真实PLC调试必须遵循厂家资料和现场安全要求。", ("siemens_s71200_manual",)),
 }
 
 RESULT_CARD_MAP = {
