@@ -96,7 +96,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.5"
+UI_STATE_VERSION = "3.6"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -164,6 +164,7 @@ def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None
     st.session_state.textbook_context = {
         "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
     }
+    st.session_state.selected_textbook_chapter = chapter_index
     set_stage(24)
 
 def progress_map():
@@ -1760,9 +1761,28 @@ elif stage == 20:
     st.write(f"**ISBN：** {book['isbn']} · **出版时间：** {book['published_at']}")
     st.link_button("查看出版社公开书目信息", book["source_url"], use_container_width=True)
     st.caption(book["notice"])
+    learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
+    st.markdown("### 项目1学习进度")
+    unit_rows = []
+    all_book_topic_ids = []
+    for index, unit in enumerate(book["chapters"]):
+        unit_topic_ids = list(unit["topic_ids"])
+        all_book_topic_ids.extend(unit_topic_ids)
+        completed = sum(topic_id in learned_topic_ids for topic_id in unit_topic_ids)
+        unit_rows.append({
+            "单元": f"{index + 1}. {unit['title']}",
+            "知识点": f"{completed}/{len(unit_topic_ids)}",
+            "状态": "已完成" if completed == len(unit_topic_ids) else ("学习中" if completed else "未开始"),
+        })
+    render_markdown_table(["单元", "知识点", "状态"], unit_rows)
+    project_completed = sum(topic_id in learned_topic_ids for topic_id in all_book_topic_ids)
+    st.progress(project_completed / len(all_book_topic_ids), text=f"项目1知识学习 {project_completed}/{len(all_book_topic_ids)}")
+    if project_completed == len(all_book_topic_ids):
+        st.success("项目1三个单元的知识小课已完成。建议完成各单元5题练习、互动识图和配套实训进行巩固。")
     chapter_index = st.selectbox(
         "选择章节", range(len(book["chapters"])),
         format_func=lambda item: f"第{item + 1}单元 · {book['chapters'][item]['title']}",
+        key="selected_textbook_chapter",
     )
     mapped_chapter = book["chapters"][chapter_index]
     st.markdown(
@@ -1771,7 +1791,6 @@ elif stage == 20:
         f'<p>{mapped_chapter["goal"]}</p></div>', unsafe_allow_html=True,
     )
     topics = topics_for_book_chapter(selected_book_id, chapter_index)
-    learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
     learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
     st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
     unit_minutes = sum((lesson_for_topic(topic["id"]) or {}).get("minutes", 2) for topic in topics)
