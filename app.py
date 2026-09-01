@@ -95,7 +95,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.0"
+UI_STATE_VERSION = "3.1"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -1675,12 +1675,27 @@ elif stage == 20:
         format_func=lambda item: f"{BOOK_EDITION_MAPPINGS[item]['title']} · {BOOK_EDITION_MAPPINGS[item]['edition']}",
     )
     book = BOOK_EDITION_MAPPINGS[selected_book_id]
-    st.caption(f"内容提供：{book['publisher']} · {book['notice']}")
+    book_metrics = st.columns(3)
+    book_metrics[0].metric("作者", book["author"])
+    book_metrics[1].metric("出版社", book["publisher"])
+    book_metrics[2].metric("试点单元", len(book["chapters"]))
+    st.write(f"**ISBN：** {book['isbn']} · **出版时间：** {book['published_at']}")
+    st.link_button("查看出版社公开书目信息", book["source_url"], use_container_width=True)
+    st.caption(book["notice"])
     chapter_index = st.selectbox(
         "选择章节", range(len(book["chapters"])),
         format_func=lambda item: f"第{item + 1}单元 · {book['chapters'][item]['title']}",
     )
+    mapped_chapter = book["chapters"][chapter_index]
+    st.markdown(
+        f'<div class="dzt-dashboard"><h3>{mapped_chapter["title"]}</h3>'
+        f'<p>对应公开目录：{mapped_chapter["source_title"]}</p>'
+        f'<p>{mapped_chapter["goal"]}</p></div>', unsafe_allow_html=True,
+    )
     topics = topics_for_book_chapter(selected_book_id, chapter_index)
+    learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
+    learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
+    st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
     st.markdown("### 本单元知识点")
     topic_columns = st.columns(2)
     for index, topic in enumerate(topics):
@@ -1691,7 +1706,33 @@ elif stage == 20:
             )
             if st.button("学习这个知识点", key=f"book_topic_{topic['id']}", use_container_width=True):
                 open_knowledge(topic["id"]); st.rerun()
-    st.warning("当前为通用教材路线，不代表任何出版社官方版本。后续可按书名、版次和ISBN增加映射。")
+    st.markdown("### 本单元练习与实训")
+    action_columns = st.columns(3)
+    quiz_chapter_id = action_columns[0].selectbox(
+        "章节练习", mapped_chapter["quiz_chapter_ids"],
+        format_func=lambda item: chapter_by_id(item)["title"],
+        key=f"book_quiz_{selected_book_id}_{chapter_index}",
+    )
+    if action_columns[0].button("开始5题练习", key=f"book_quiz_start_{chapter_index}", use_container_width=True):
+        start_chapter_quiz(quiz_chapter_id); st.rerun()
+    case_id = action_columns[1].selectbox(
+        "互动识图", mapped_chapter["case_ids"],
+        format_func=lambda item: DIAGRAM_CASES[item]["title"],
+        key=f"book_case_{selected_book_id}_{chapter_index}",
+    )
+    if action_columns[1].button("开始互动识图", key=f"book_case_start_{chapter_index}", use_container_width=True):
+        start_diagram_training(case_id); st.rerun()
+    experiment_ids = mapped_chapter["experiment_ids"]
+    if experiment_ids:
+        mapped_experiment_id = action_columns[2].selectbox(
+            "故障模拟", experiment_ids, format_func=lambda item: catalog[item]["name"],
+            key=f"book_experiment_{selected_book_id}_{chapter_index}",
+        )
+        if action_columns[2].button("开始引导实训", key=f"book_experiment_start_{chapter_index}", use_container_width=True):
+            prepare_task(mapped_experiment_id, "引导学习模式"); st.rerun()
+    else:
+        action_columns[2].info("本单元使用识图和课程综合实训，暂不提供独立故障模拟。")
+    st.warning(book["notice"] + " 平台内容为原创讲解与训练，不替代纸质或正版电子教材。")
     if st.button("返回学习首页", use_container_width=True): set_stage(1); st.rerun()
 
 elif stage == 21:
