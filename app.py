@@ -95,7 +95,7 @@ make_learning_activity = storage_module.make_learning_activity
 make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 
-UI_STATE_VERSION = "3.3"
+UI_STATE_VERSION = "3.4"
 STORAGE_CACHE_VERSION = "2.7-capstone-v1"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -157,6 +157,13 @@ def open_knowledge(card_id: str | None = None) -> None:
     if card_id:
         st.session_state.selected_knowledge_card = card_id
     set_stage(6)
+
+def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None:
+    """打开教材语境下的知识页，避免跳入实验知识中心。"""
+    st.session_state.textbook_context = {
+        "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
+    }
+    set_stage(24)
 
 def progress_map():
     result = {}
@@ -337,7 +344,7 @@ def render_experiment_selector() -> None:
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -1775,7 +1782,7 @@ elif stage == 20:
                 f'<p>{topic["summary"]}</p></div>', unsafe_allow_html=True,
             )
             if st.button("学习这个知识点", key=f"book_topic_{topic['id']}", use_container_width=True):
-                open_knowledge(topic["id"]); st.rerun()
+                open_textbook_topic(selected_book_id, chapter_index, topic["id"]); st.rerun()
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
     quiz_chapter_id = action_columns[0].selectbox(
@@ -1804,6 +1811,58 @@ elif stage == 20:
         action_columns[2].info("本单元使用识图和课程综合实训，暂不提供独立故障模拟。")
     st.warning(book["notice"] + " 平台内容为原创讲解与训练，不替代纸质或正版电子教材。")
     if st.button("返回学习首页", use_container_width=True): set_stage(1); st.rerun()
+
+elif stage == 24:
+    context = st.session_state.get("textbook_context", {})
+    book_id = context.get("book_id")
+    chapter_index = context.get("chapter_index")
+    topic_id = context.get("topic_id")
+    if book_id not in BOOK_EDITION_MAPPINGS:
+        st.warning("教材学习位置已失效，请重新选择教材。")
+        if st.button("返回教材中心", type="primary", use_container_width=True): set_stage(20); st.rerun()
+    else:
+        book = BOOK_EDITION_MAPPINGS[book_id]
+        if not isinstance(chapter_index, int) or not 0 <= chapter_index < len(book["chapters"]):
+            st.warning("教材单元已失效，请重新选择。")
+            if st.button("返回教材中心", type="primary", use_container_width=True): set_stage(20); st.rerun()
+        else:
+            mapped_chapter = book["chapters"][chapter_index]
+            topic_ids = list(mapped_chapter["topic_ids"])
+            if topic_id not in topic_ids:
+                topic_id = topic_ids[0]
+                st.session_state.textbook_context["topic_id"] = topic_id
+            card = KNOWLEDGE_CARDS[topic_id]
+            topic_index = topic_ids.index(topic_id)
+            st.markdown('<div class="dzt-section-label">Textbook lesson</div>', unsafe_allow_html=True)
+            st.caption(f"{book['title']}  ›  {mapped_chapter['title']}  ›  知识点 {topic_index + 1}/{len(topic_ids)}")
+            st.subheader(card["title"])
+            st.info(f"**核心原理：** {card['principle']}")
+            st.markdown("### 理解这个知识点")
+            st.write(card["role"])
+            st.success(f"**正确理解：** {card['normal']}")
+            st.warning(f"**常见误区：** {card['abnormal']}")
+            st.markdown("### 学习小结")
+            st.write(card["review"])
+            render_provenance(provenance_for_card(topic_id))
+            activity_experiment_id = (mapped_chapter["experiment_ids"] or (DEFAULT_EXPERIMENT_ID,))[0]
+            learned = set().union(*(repository.learned_cards(item) for item in catalog))
+            if topic_id in learned:
+                st.success("这个知识点已标记为学过，可以继续复习。")
+            elif st.button("标记为已学习", type="primary", use_container_width=True):
+                repository.save_activity(make_learning_activity(activity_experiment_id, "knowledge_card", topic_id))
+                st.success("已记录教材学习进度。")
+                st.rerun()
+            lesson_actions = st.columns(2)
+            if topic_index + 1 < len(topic_ids):
+                if lesson_actions[0].button("下一个知识点", type="primary", use_container_width=True):
+                    st.session_state.textbook_context["topic_id"] = topic_ids[topic_index + 1]
+                    st.rerun()
+            else:
+                lesson_actions[0].success("本单元知识点已浏览完成")
+            if lesson_actions[1].button("返回本单元", use_container_width=True):
+                st.session_state.pop("textbook_context", None)
+                set_stage(20); st.rerun()
+            st.caption("本页属于教材知识学习，不是故障诊断或真实设备操作指导。")
 
 elif stage == 21:
     st.markdown('<div class="dzt-section-label">Practice center</div>', unsafe_allow_html=True)
