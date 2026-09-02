@@ -203,7 +203,7 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             if answer["uncertain"] != (answer["selected_answer"] == "不确定"):
                 raise BackupValidationError("不确定状态与答案不一致")
             actual_correct += int(is_correct)
-        threshold = 0.7 if item["mode"] == "course_exam" else 0.6
+        threshold = 0.7 if item["mode"] in {"course_exam", "textbook_unit_assessment"} else 0.6
         if actual_correct != correct or passed != bool(total and correct / total >= threshold):
             raise BackupValidationError("测验得分与答案不一致")
 

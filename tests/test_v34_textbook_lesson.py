@@ -4,8 +4,8 @@ from pathlib import Path
 def test_textbook_topic_opens_independent_lesson_not_experiment_center():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.3"' in config
-    assert 'UI_STATE_VERSION = "4.3"' in app
+    assert 'APP_VERSION = "4.4"' in config
+    assert 'UI_STATE_VERSION = "4.4"' in app
     assert "open_textbook_topic(selected_book_id, chapter_index, topic[\"id\"])" in app
     assert "elif stage == 24" in app
     for phrase in ("核心原理", "理解这个知识点", "正确理解", "常见误区", "学习小结", "返回本单元"):

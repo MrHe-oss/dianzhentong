@@ -38,6 +38,6 @@ def test_sqlite_bookmarks_and_visits_survive_restart(tmp_path):
 def test_v41_ui_has_bookshelf_search_bookmarks_and_recent_learning():
     app = open("app.py", encoding="utf-8").read()
     config = open("dianzhentong/config.py", encoding="utf-8").read()
-    assert 'APP_VERSION = "4.3"' in config and 'UI_STATE_VERSION = "4.3"' in app
+    assert 'APP_VERSION = "4.4"' in config and 'UI_STATE_VERSION = "4.4"' in app
     for phrase in ("我的教材书架", "搜索学习内容", "我的收藏", "最近学习", "收藏知识点"):
         assert phrase in app

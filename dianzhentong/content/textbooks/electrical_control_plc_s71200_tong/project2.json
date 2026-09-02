@@ -23,7 +23,7 @@
         "title": "认识S7-1200 PLC硬件系统",
         "goal": "从系统角色出发，区分CPU、信号模块和通信模块的基本职责。",
         "topic_ids": ["plc_system_role", "plc_cpu", "plc_modules"],
-        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "case_ids": ["plc_hardware_roles"], "experiment_ids": [], "quiz_chapter_ids": ["p2_unit_1"],
         "worked_example": {
           "title": "原创例题：硬件角色分类",
           "scenario": "某抽象控制系统需要读取开关状态、执行逻辑并与另一控制单元交换信息。应如何按功能划分角色？",
@@ -31,7 +31,7 @@
           "answer": "先按输入、核心处理、输出和扩展通信划分功能，再讨论具体模块。",
           "practice": "负责执行用户程序的核心角色是？",
           "options": ["CPU", "任意信号模块", "所有外部按钮"], "practice_answer": "CPU",
-          "practice_explanation": "CPU承担程序执行和系统协调等核心任务。"
+          "practice_explanation": "CPU承担程序执行和系统协调等核心任务。", "practice_question_id": "q91"
         },
         "topics": [
           {"id":"plc_system_role","lesson":{"minutes":4,"lead":"PLC不是孤立设备，而是输入、逻辑处理与输出关系中的控制核心。","points":["输入侧提供状态或请求信息。","CPU按程序处理信息。","输出侧接收逻辑结果，扩展模块补充系统能力。"],"example":"按钮状态属于输入信息，程序判断属于处理环节，指示结果属于输出信息。","question":"PLC控制系统的基本信息链是？","options":["输入—处理—输出","输出—外观—价格","接线—送电—维修"],"answer":"输入—处理—输出","explanation":"入门分析先建立输入、处理和输出的功能链。"},"formulas":[]},
@@ -45,7 +45,7 @@
         "title": "PLC程序设计基础",
         "goal": "理解程序循环、变量与数据类型，以及逻辑网络的组织方式。",
         "topic_ids": ["plc_program_cycle", "plc_variables", "plc_logic_structure"],
-        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "case_ids": ["plc_scan_cycle"], "experiment_ids": [], "quiz_chapter_ids": ["p2_unit_2"],
         "worked_example": {
           "title": "原创例题：从控制要求到逻辑网络",
           "scenario": "一个教学任务要求：允许条件成立且启动请求出现时产生运行请求，停止条件出现时撤销。如何组织分析？",
@@ -53,7 +53,7 @@
           "answer": "先定义变量，再拆分逻辑，最后检查条件与结果是否一致。",
           "practice": "程序设计前最适合先明确什么？",
           "options": ["控制要求与变量含义", "真实端子接线", "设备外观"], "practice_answer": "控制要求与变量含义",
-          "practice_explanation": "清晰的对象和变量定义是可读逻辑的基础。"
+          "practice_explanation": "清晰的对象和变量定义是可读逻辑的基础。", "practice_question_id": "q98"
         },
         "topics": [
           {"id":"plc_program_cycle","lesson":{"minutes":5,"lead":"PLC通过重复循环处理输入信息和程序逻辑。","points":["读取输入形成当前状态信息。","按顺序执行用户程序。","把处理结果反映到输出状态并进入下一循环。"],"example":"输入改变后，需要经过程序处理阶段，相关输出逻辑才会得到新的结果。","question":"PLC程序循环是否通常只执行一次？","options":["不是，会持续循环","是，只执行一次","只有断电时执行"],"answer":"不是，会持续循环","explanation":"PLC通常循环处理输入、程序和输出。"},"formulas":[{"title":"抽象循环关系","expression":"Y_{k+1}=F(X_k,S_k)","symbols":["X：当前输入信息","S：当前内部状态","Y：本轮逻辑结果"],"meaning":"该式仅表达离散循环中的信息关系，不代表真实扫描细节或接线。"}]},
@@ -67,7 +67,7 @@
         "title": "TIA博途软件基础",
         "goal": "理解项目、设备、程序块和变量表之间的工程组织关系。",
         "topic_ids": ["tia_project", "tia_device_config", "tia_program_blocks"],
-        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "case_ids": ["plc_tia_objects"], "experiment_ids": [], "quiz_chapter_ids": ["p2_unit_3"],
         "worked_example": {
           "title": "原创例题：工程对象归类",
           "scenario": "某离线教学工程包含控制器描述、逻辑程序和一组命名变量。它们应归入什么层次？",
@@ -75,7 +75,7 @@
           "answer": "项目统一组织设备、程序块和变量等工程对象。",
           "practice": "承载控制逻辑的主要工程对象是？",
           "options": ["程序块", "项目标题", "软件窗口颜色"], "practice_answer": "程序块",
-          "practice_explanation": "程序块用于组织和承载控制逻辑。"
+          "practice_explanation": "程序块用于组织和承载控制逻辑。", "practice_question_id": "q103"
         },
         "topics": [
           {"id":"tia_project","lesson":{"minutes":4,"lead":"TIA博途工程项目是组织设备与程序信息的容器。","points":["项目保存工程对象之间的关系。","设备描述和程序逻辑属于不同对象。","工程命名应清楚反映教学任务。"],"example":"同一个项目可以同时包含控制器描述、程序块和变量定义。","question":"项目在工程中的作用是？","options":["统一组织工程对象","替代所有硬件","直接证明逻辑正确"],"answer":"统一组织工程对象","explanation":"项目提供工程信息的组织边界。"},"formulas":[]},
@@ -89,7 +89,7 @@
         "title": "简单PLC项目流程",
         "goal": "建立需求分析、工程组织、逻辑检查与安全复盘的完整学习流程。",
         "topic_ids": ["plc_project_flow", "plc_compile_check", "plc_monitoring_boundary"],
-        "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": [],
+        "case_ids": ["plc_project_check"], "experiment_ids": [], "quiz_chapter_ids": ["p2_unit_4"],
         "worked_example": {
           "title": "原创例题：项目检查顺序",
           "scenario": "一个离线教学项目已经写出逻辑，但变量含义不清，也尚未检查编译信息。下一步应如何处理？",
@@ -97,7 +97,7 @@
           "answer": "先保证定义与工程一致，再进行模拟逻辑复盘，不能直接用于真实设备。",
           "practice": "编译通过能否证明控制需求完全正确？",
           "options": ["不能", "一定能", "与程序无关"], "practice_answer": "不能",
-          "practice_explanation": "编译检查主要验证工程内部规则，仍需验证控制逻辑和安全要求。"
+          "practice_explanation": "编译检查主要验证工程内部规则，仍需验证控制逻辑和安全要求。", "practice_question_id": "q107"
         },
         "topics": [
           {"id":"plc_project_flow","lesson":{"minutes":5,"lead":"简单项目也应从需求出发，而不是从堆叠指令开始。","points":["明确输入、输出与控制目标。","建立设备、变量和程序的工程对象。","检查、模拟验证并形成复盘记录。"],"example":"先写出“何时允许、何时动作、何时退出”，再把要求转成变量和逻辑。","question":"简单项目的合理起点是？","options":["需求与控制目标","随意选择指令","真实设备送电"],"answer":"需求与控制目标","explanation":"需求决定变量、逻辑和验证目标。"},"formulas":[]},

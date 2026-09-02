@@ -16,9 +16,9 @@ def answer(question, selected=None):
 
 
 def test_bank_has_safe_questions_with_expected_distribution():
-    assert len(QUESTIONS) == 90
+    assert len(QUESTIONS) == 110
     assert [len(questions_for_chapter(item["id"])) for item in CHAPTERS] == [6, 10, 7, 7]
-    assert len({item.id for item in QUESTIONS}) == 90
+    assert len({item.id for item in QUESTIONS}) == 110
     text = " ".join(item.stem + item.explanation for item in QUESTIONS)
     assert "短接验证" not in text
     assert "进行带电测量" not in text

@@ -60,7 +60,7 @@ from dianzhentong.curriculum_catalog import (
     BOOK_EDITION_MAPPINGS, KNOWLEDGE_TOPICS, LEARNING_DOMAINS,
     topics_for_book_chapter,
 )
-from dianzhentong.textbook_learning import lesson_for_topic
+from dianzhentong.textbook_learning import calculate_unit_progress, lesson_for_topic
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
 from dianzhentong.textbook_discovery import build_textbook_index, search_textbooks
@@ -102,8 +102,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.3"
-STORAGE_CACHE_VERSION = "4.3-textbook-project2"
+UI_STATE_VERSION = "4.4"
+STORAGE_CACHE_VERSION = "4.4-plc-learning-loop"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -174,6 +174,37 @@ def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None
     set_stage(24)
 
 TEXTBOOK_SEARCH_INDEX = build_textbook_index(BOOK_EDITION_MAPPINGS)
+TEXTBOOK_QUIZ_CONTEXT = {
+    chapter_id: (book_id, index)
+    for book_id, book in BOOK_EDITION_MAPPINGS.items()
+    for index, unit in enumerate(book["chapters"])
+    for chapter_id in unit["quiz_chapter_ids"]
+}
+
+
+def textbook_unit_state(book_id: str, chapter_index: int):
+    unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
+    learned = set().union(*(repository.learned_cards(item) for item in catalog))
+    chapter_id = unit["quiz_chapter_ids"][0] if unit["quiz_chapter_ids"] else ""
+    history = repository.quiz_history(chapter_id, 100) if chapter_id else []
+    if not unit["worked_example"].get("practice_question_id") and all(item in learned for item in unit["topic_ids"]):
+        history = [*history, {"mode": "textbook_example"}]
+    return calculate_unit_progress(tuple(unit["topic_ids"]), learned, history)
+
+
+def record_textbook_example(book_id: str, chapter_index: int, selected_answer: str) -> bool:
+    """正确完成原创变式后，用既有测验存储去重记录例题进度。"""
+    unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
+    example = unit["worked_example"]
+    question_id = example.get("practice_question_id")
+    if not question_id or selected_answer != example["practice_answer"]:
+        return False
+    question = QUESTION_MAP[question_id]
+    answer = QuizAnswer(question.id, selected_answer, question.answer, True, False)
+    return repository.save_quiz(make_quiz_record(
+        question.chapter_id, (answer,), mode="textbook_example",
+        quiz_id=f"textbook-example-{book_id}-{unit['project_id']}-{unit['title']}",
+    ))
 
 def progress_map():
     result = {}
@@ -260,10 +291,12 @@ def start_similar_quiz(question_id: str) -> None:
     question = QUESTION_MAP[question_id]
     related = similar_questions(question_id, 1)
     selected = related or (question,)
+    context = TEXTBOOK_QUIZ_CONTEXT.get(question.chapter_id)
     st.session_state.quiz_state = {
         "chapter_id": question.chapter_id, "mode": "similar_review",
         "question_ids": [item.id for item in selected], "index": 0,
         "answers": [], "answered": False,
+        **({"book_id": context[0], "book_chapter_index": context[1]} if context else {}),
     }
     set_stage(10)
 
@@ -1228,16 +1261,22 @@ elif stage == 9:
 
 elif stage == 10:
     quiz = st.session_state.get("quiz_state")
-    if not quiz or quiz.get("chapter_id") not in {item["id"] for item in ALL_CHAPTERS}:
+    valid_quiz_chapters = {item["id"] for item in ALL_CHAPTERS} | set(TEXTBOOK_QUIZ_CONTEXT)
+    if not quiz or quiz.get("chapter_id") not in valid_quiz_chapters:
         st.warning("测验状态已失效，请重新开始。")
         if st.button("返回课程地图", use_container_width=True):
             set_stage(1); st.rerun()
     else:
-        chapter = chapter_by_id(quiz["chapter_id"])
+        textbook_context = TEXTBOOK_QUIZ_CONTEXT.get(quiz["chapter_id"])
+        if textbook_context:
+            textbook_book = BOOK_EDITION_MAPPINGS[textbook_context[0]]
+            quiz_title = textbook_book["chapters"][textbook_context[1]]["title"]
+        else:
+            quiz_title = chapter_by_id(quiz["chapter_id"])["title"]
         question_ids = quiz["question_ids"]
         index = min(int(quiz["index"]), len(question_ids) - 1)
         question = QUESTION_MAP[question_ids[index]]
-        st.subheader(f"📝 {chapter['title']} · {'错题复习' if quiz['mode'] == 'wrong_review' else '章节测验'}")
+        st.subheader(f"📝 {quiz_title} · {'错题复习' if quiz['mode'] in {'wrong_review', 'similar_review'} else '单元测验'}")
         st.progress((index + 1) / len(question_ids), text=f"第 {index + 1} / {len(question_ids)} 题")
         st.markdown(f"### {question.stem}")
         selected = st.radio(
@@ -1295,18 +1334,21 @@ elif stage == 11:
     if not result:
         st.warning("没有可显示的测验结果。")
     else:
-        chapter = chapter_by_id(quiz["chapter_id"])
         score = result["correct_count"] / result["total_count"]
         unit_pretest = quiz.get("mode") == "textbook_unit_pretest"
         unit_assessment = quiz.get("mode") == "textbook_unit_assessment"
         unit_mode = unit_pretest or unit_assessment
+        textbook_context = TEXTBOOK_QUIZ_CONTEXT.get(quiz["chapter_id"])
+        if textbook_context and "book_id" not in quiz:
+            quiz["book_id"], quiz["book_chapter_index"] = textbook_context
+        chapter = None if textbook_context else chapter_by_id(quiz["chapter_id"])
         st.subheader("📋 学前小测报告" if unit_pretest else ("📋 单元评测报告" if unit_assessment else "📋 章节测验报告"))
         if unit_mode:
             book = BOOK_EDITION_MAPPINGS[quiz["book_id"]]
             mapped_chapter = book["chapters"][quiz["book_chapter_index"]]
             st.markdown(f"### {mapped_chapter['title']}")
         else:
-            st.markdown(f"### {chapter['title']}")
+            st.markdown(f"### {chapter['title'] if chapter else BOOK_EDITION_MAPPINGS[quiz['book_id']]['chapters'][quiz['book_chapter_index']]['title']}")
         st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
         if unit_assessment:
             effect = textbook_unit_effect(quiz["book_id"], quiz["book_chapter_index"])
@@ -1338,9 +1380,13 @@ elif stage == 11:
                     if unit_mode and card_id in mapped_chapter["topic_ids"]:
                         open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], card_id)
                     else:
-                        chapter = chapter_by_id(question.chapter_id)
-                        st.session_state.selected_experiment_id = chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
-                        open_knowledge(card_id)
+                        question_context = TEXTBOOK_QUIZ_CONTEXT.get(question.chapter_id)
+                        if question_context:
+                            open_textbook_topic(question_context[0], question_context[1], card_id)
+                        else:
+                            question_chapter = chapter_by_id(question.chapter_id)
+                            st.session_state.selected_experiment_id = question_chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
+                            open_knowledge(card_id)
                     st.rerun()
                 if action_columns[1].button("再做一道相似题", key=f"similar_{question.id}", use_container_width=True):
                     start_similar_quiz(question.id); st.rerun()
@@ -1367,8 +1413,14 @@ elif stage == 11:
                 st.session_state.selected_textbook_chapter = quiz["book_chapter_index"]
                 set_stage(20)
             else:
-                st.session_state.selected_chapter_id = quiz["chapter_id"]
-                set_stage(8)
+                context = TEXTBOOK_QUIZ_CONTEXT.get(quiz["chapter_id"])
+                if context:
+                    st.session_state.selected_textbook_id = context[0]
+                    st.session_state.selected_textbook_chapter = context[1]
+                    set_stage(20)
+                else:
+                    st.session_state.selected_chapter_id = quiz["chapter_id"]
+                    set_stage(8)
             st.rerun()
 
 elif stage == 12:
@@ -1495,8 +1547,16 @@ elif stage == 13:
             if st.button("再练一个案例", type="primary", use_container_width=True):
                 start_diagram_training(next_case["id"]); st.rerun()
             if st.button("返回本章", use_container_width=True):
-                st.session_state.selected_chapter_id = case["chapter_id"]
-                st.session_state.pop("diagram_training", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
+                context = TEXTBOOK_QUIZ_CONTEXT.get(case["chapter_id"])
+                st.session_state.pop("diagram_training", None); st.session_state.pop("review_origin", None)
+                if context:
+                    st.session_state.selected_textbook_id = context[0]
+                    st.session_state.selected_textbook_chapter = context[1]
+                    set_stage(20)
+                else:
+                    st.session_state.selected_chapter_id = case["chapter_id"]
+                    set_stage(8)
+                st.rerun()
 
 elif stage == 14:
     exam = st.session_state.get("course_exam_state", {})
@@ -1899,31 +1959,17 @@ elif stage == 20:
     st.markdown("### 教材项目学习进度")
     unit_rows = []
     all_book_topic_ids = []
-    completed_case_ids = {item["case_id"] for item in repository.diagram_history(limit=1000)}
     for index, unit in enumerate(book["chapters"]):
         unit_topic_ids = list(unit["topic_ids"])
         all_book_topic_ids.extend(unit_topic_ids)
         completed = sum(topic_id in learned_topic_ids for topic_id in unit_topic_ids)
-        knowledge_done = completed == len(unit_topic_ids)
-        has_assessment = bool(unit["quiz_chapter_ids"])
-        assessment_done = any(repository.quiz_summary(item)["passed_count"] for item in unit["quiz_chapter_ids"])
-        diagram_done = bool(set(unit["case_ids"]) & completed_case_ids)
-        if knowledge_done and not has_assessment:
-            unit_status = "知识完成"
-        elif knowledge_done and assessment_done and diagram_done:
-            unit_status = "基本掌握"
-        elif knowledge_done:
-            unit_status = "待评测" if not assessment_done else "待识图巩固"
-        elif completed:
-            unit_status = "学习中"
-        else:
-            unit_status = "未开始"
+        unit_state = textbook_unit_state(selected_book_id, index)
         unit_rows.append({
             "项目": unit["project_title"], "单元": unit['title'],
             "知识点": f"{completed}/{len(unit_topic_ids)}",
-            "状态": unit_status,
+            "进度": f"{unit_state.completion:.0%}", "状态": unit_state.status,
         })
-    render_markdown_table(["项目", "单元", "知识点", "状态"], unit_rows)
+    render_markdown_table(["项目", "单元", "知识点", "进度", "状态"], unit_rows)
     project_completed = sum(topic_id in learned_topic_ids for topic_id in all_book_topic_ids)
     st.progress(project_completed / len(all_book_topic_ids), text=f"教材知识学习 {project_completed}/{len(all_book_topic_ids)}")
     if project_completed == len(all_book_topic_ids):
@@ -1934,6 +1980,7 @@ elif stage == 20:
         key="selected_textbook_chapter",
     )
     mapped_chapter = book["chapters"][chapter_index]
+    current_unit_state = textbook_unit_state(selected_book_id, chapter_index)
     st.markdown(
         f'<div class="dzt-dashboard"><h3>{mapped_chapter["title"]}</h3>'
         f'<p>对应公开目录：{mapped_chapter["source_title"]}</p>'
@@ -1941,7 +1988,11 @@ elif stage == 20:
     )
     topics = topics_for_book_chapter(selected_book_id, chapter_index)
     learned_count = sum(topic["id"] in learned_topic_ids for topic in topics)
-    st.progress(learned_count / len(topics), text=f"知识点学习 {learned_count} / {len(topics)}")
+    st.progress(current_unit_state.completion, text=f"单元掌握进度 {current_unit_state.completion:.0%} · {current_unit_state.status}")
+    progress_parts = st.columns(3)
+    progress_parts[0].metric("知识学习 · 40%", f"{current_unit_state.knowledge_completion:.0%}")
+    progress_parts[1].metric("例题练习 · 20%", "已完成" if current_unit_state.example_completed else "待完成")
+    progress_parts[2].metric("单元评测 · 40%", "已通过" if current_unit_state.assessment_passed else "待通过")
     learning_effect = textbook_unit_effect(selected_book_id, chapter_index) if mapped_chapter["quiz_chapter_ids"] else {"before": None, "after": None, "improvement": None}
     if learning_effect["before"] is not None:
         effect_columns = st.columns(2)
@@ -1971,6 +2022,17 @@ elif stage == 20:
         for step_index, step in enumerate(unit_example["steps"], 1):
             st.write(f"{step_index}. {step}")
         st.success(f"**结论：** {unit_example['answer']}")
+        st.markdown("#### 变式练习")
+        overview_variant = st.radio(
+            unit_example["practice"], unit_example["options"], index=None,
+            key=f"unit_variant_{selected_book_id}_{chapter_index}",
+        )
+        if overview_variant == unit_example["practice_answer"]:
+            if record_textbook_example(selected_book_id, chapter_index, overview_variant):
+                st.rerun()
+            st.success(f"回答正确。{unit_example['practice_explanation']}")
+        elif overview_variant:
+            st.warning(f"请重新分析。{unit_example['practice_explanation']}")
         st.caption("平台原创例题，不是教材原题或课后题答案。")
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
@@ -2122,6 +2184,7 @@ elif stage == 24:
                 variant_key = f"textbook_variant_{book_id}_{chapter_index}_{topic_id}"
                 variant_answer = st.radio(unit_example["practice"], unit_example["options"], index=None, key=variant_key)
                 if variant_answer == unit_example["practice_answer"]:
+                    record_textbook_example(book_id, chapter_index, variant_answer)
                     st.success(f"回答正确。{unit_example['practice_explanation']}")
                 elif variant_answer:
                     st.warning(f"请重新分析。{unit_example['practice_explanation']}")

@@ -10,6 +10,22 @@ def _step(step_id: str, prompt: str, options: tuple[str, ...], answer: str, expl
     return {"id": step_id, "prompt": prompt, "options": options, "answer": answer, "explanation": explanation}
 
 DIAGRAM_CASES: dict[str, dict[str, Any]] = {
+    "plc_hardware_roles": {"chapter_id":"p2_unit_1","title":"PLC硬件：识别系统角色","phenomenon":"一个抽象控制任务需要读取状态、执行逻辑并交换信息。","nodes":("输入信息","CPU处理","输出结果","扩展能力"),"card_ids":("plc_system_role","plc_cpu","plc_modules"),"steps":(
+        _step("plc_hw_input","现场状态在信息链中属于什么？",("输入信息","CPU处理","通信结果"),"输入信息","现场状态先作为输入信息进入控制系统。"),
+        _step("plc_hw_core","哪个角色负责执行用户程序？",("CPU","信号模块","外部按钮"),"CPU","CPU承担核心程序执行和系统协调。"),
+        _step("plc_hw_expand","需要增加信号处理能力时关注什么？",("信号扩展模块","项目标题","程序注释"),"信号扩展模块","模块按任务需求补充系统能力。"))},
+    "plc_scan_cycle": {"chapter_id":"p2_unit_2","title":"PLC程序：排列扫描逻辑","phenomenon":"模拟输入已经变化，需要判断程序循环中信息如何形成新结果。","nodes":("读取输入","执行程序","更新结果","下一循环"),"card_ids":("plc_program_cycle","plc_variables","plc_logic_structure"),"steps":(
+        _step("plc_cycle_read","程序处理前先取得什么？",("当前输入信息","下一轮结果","真实端子位置"),"当前输入信息","当前输入是本轮逻辑处理的基础。"),
+        _step("plc_cycle_process","取得输入后进入哪个环节？",("执行用户程序","直接结束循环","修改真实设备"),"执行用户程序","程序根据输入和内部状态计算逻辑结果。"),
+        _step("plc_cycle_update","程序执行后应形成什么？",("本轮输出结果","新的设备型号","接线步骤"),"本轮输出结果","处理结果更新后进入下一次循环。"))},
+    "plc_tia_objects": {"chapter_id":"p2_unit_3","title":"TIA博途：匹配工程对象","phenomenon":"离线教学工程包含控制器描述、控制逻辑和命名变量。","nodes":("工程项目","设备组态","程序块","变量表"),"card_ids":("tia_project","tia_device_config","tia_program_blocks"),"steps":(
+        _step("plc_tia_container","统一组织全部工程对象的是？",("工程项目","程序块","变量表"),"工程项目","项目提供设备与程序信息的组织边界。"),
+        _step("plc_tia_device","控制器和模块构成归入什么对象？",("设备组态","变量表","项目标题"),"设备组态","组态用于描述工程中的控制器和模块构成。"),
+        _step("plc_tia_logic","控制逻辑主要由什么承载？",("程序块","设备外观","学习记录"),"程序块","程序块承载控制逻辑，变量表集中管理变量定义。"))},
+    "plc_project_check": {"chapter_id":"p2_unit_4","title":"PLC项目：建立检查闭环","phenomenon":"一个离线项目已经写出逻辑，但变量含义不清，也尚未检查工程信息。","nodes":("需求分析","变量与工程","编译检查","模拟复盘"),"card_ids":("plc_project_flow","plc_compile_check","plc_monitoring_boundary"),"steps":(
+        _step("plc_project_start","首先应回到哪个环节？",("需求与控制目标","真实设备送电","随机增加指令"),"需求与控制目标","需求决定变量、逻辑和验证目标。"),
+        _step("plc_project_compile","定义清楚后应完成什么检查？",("工程一致性与编译检查","真实跨接验证","只检查窗口颜色"),"工程一致性与编译检查","先处理结构、引用、类型和警告等工程信息。"),
+        _step("plc_project_validate","编译通过后还需要什么？",("离线模拟逻辑复盘","直接证明现场安全","强制真实变量"),"离线模拟逻辑复盘","编译通过不等于需求正确，仍需离线验证与安全复盘。"))},
     "dol_roles": {"chapter_id":"diagram_symbols_roles","title":"直接启动：识别元件角色","phenomenon":"按下启动按钮后，模拟执行元件没有形成动作条件。","nodes":("保护条件","停止条件","启动请求","执行元件"),"card_ids":("diagram_symbols","button_contacts","contactor_coil"),"steps":(
         _step("dol_roles_scope","第一步应先识别哪类上游角色？",("保护条件","执行元件","无关分支"),"保护条件","保护条件位于公共路径上游。"),
         _step("dol_roles_signal","保护条件正常后，哪个角色表达启动意图？",("启动请求","停止条件","执行元件"),"启动请求","启动按钮的抽象角色是提供启动请求。"),
