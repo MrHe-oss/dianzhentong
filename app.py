@@ -61,6 +61,8 @@ from dianzhentong.curriculum_catalog import (
     topics_for_book_chapter,
 )
 from dianzhentong.textbook_learning import calculate_unit_progress, lesson_for_topic
+from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
+from dianzhentong.plc_lab_ui import render_lab
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
 from dianzhentong.textbook_discovery import build_textbook_index, search_textbooks
@@ -102,8 +104,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.4"
-STORAGE_CACHE_VERSION = "4.4.1-review-reliability"
+UI_STATE_VERSION = "4.5"
+STORAGE_CACHE_VERSION = "4.5-plc-labs"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -180,6 +182,8 @@ TEXTBOOK_QUIZ_CONTEXT = {
     for index, unit in enumerate(book["chapters"])
     for chapter_id in unit["quiz_chapter_ids"]
 }
+TEXTBOOK_QUIZ_CONTEXT.update({f"plc_lab_{key}": (PLC_BOOK_ID, lab["unit"])
+                              for key, lab in LABS.items()})
 
 
 def textbook_unit_state(book_id: str, chapter_index: int):
@@ -427,7 +431,7 @@ def render_experiment_selector() -> None:
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -2041,6 +2045,16 @@ elif stage == 20:
         elif overview_variant:
             st.warning(f"请重新分析。{unit_example['practice_explanation']}")
         st.caption("平台原创例题，不是教材原题或课后题答案。")
+    unit_labs = {key: lab for key, lab in LABS.items()
+                 if selected_book_id == PLC_BOOK_ID and chapter_index == lab["unit"]}
+    if unit_labs:
+        st.markdown("### 互动学习：先预测，再观察")
+        for lab_id, lab in unit_labs.items():
+            st.caption(lab["goal"])
+            if st.button(lab["title"], key=f"open_lab_{lab_id}", use_container_width=True):
+                st.session_state.plc_lab_session = LabSession(lab_id)
+                set_stage(26); st.rerun()
+
     st.markdown("### 本单元练习与实训")
     action_columns = st.columns(3)
     action_columns[0].markdown("**单元评测**")
@@ -2315,6 +2329,9 @@ elif stage == 21:
         start_course_exam(selected_practice_course); st.rerun()
     if not eligible:
         st.caption("通过该课程全部章节测验后开放综合评测。")
+
+elif stage == 26:
+    render_lab(repository, set_stage, open_textbook_topic, render_provenance, provenance_for_card)
 
 elif stage == 22:
     st.markdown('<div class="dzt-section-label">Virtual laboratory</div>', unsafe_allow_html=True)

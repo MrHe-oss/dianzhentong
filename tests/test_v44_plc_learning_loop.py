@@ -57,8 +57,8 @@ def test_v44_ui_and_counts_are_updated():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
     readme = Path("README.md").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.4.1"' in config and 'UI_STATE_VERSION = "4.4"' in app
-    assert len(QUESTIONS) == 110 and len(DIAGRAM_CASES) == 22
+    assert 'APP_VERSION = "4.5"' in config and 'UI_STATE_VERSION = "4.5"' in app
+    assert len(QUESTIONS) == 116 and len(DIAGRAM_CASES) == 22
     for phrase in ("知识学习 · 40%", "例题练习 · 20%", "单元评测 · 40%"):
         assert phrase in app
-    assert "110道题" in readme and "22个识图案例" in readme
+    assert "116道题" in readme and "22个识图案例" in readme

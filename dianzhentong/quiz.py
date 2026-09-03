@@ -161,6 +161,10 @@ QUESTIONS = (
     _q(110,"p2_unit_4","编译检查和逻辑验证是否相同？",("不同，需要分别完成","完全相同","只需编译检查"),"不同，需要分别完成","编译检查工程规则，逻辑验证控制要求。","验证边界"),
 )
 
+from .plc_lab import question_specs
+
+QUESTIONS += tuple(QuizQuestion(**{key: value for key, value in row.items() if key != "card"})
+                   for row in question_specs())
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -199,6 +203,9 @@ QUESTION_CARD_MAP = {
     "q106": "plc_project_flow", "q107": "plc_compile_check", "q108": "plc_project_flow",
     "q109": "plc_monitoring_boundary", "q110": "plc_compile_check",
 }
+
+
+QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in question_specs()})
 
 
 def card_id_for_question(question_id: str) -> str:
