@@ -4,7 +4,7 @@ from pathlib import Path
 def test_v32_makes_textbook_learning_the_primary_entry():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.4"' in config
+    assert 'APP_VERSION = "4.4.1"' in config
     assert 'UI_STATE_VERSION = "4.4"' in app
     for phrase in (
         "从教材开始学习", "进入教材目录", "教材知识点进度",

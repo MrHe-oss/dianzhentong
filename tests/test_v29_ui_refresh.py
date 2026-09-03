@@ -18,5 +18,5 @@ def test_v29_has_dashboard_navigation_and_responsive_visual_system():
 def test_v29_keeps_storage_schema_and_learning_content_unchanged():
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
     backup = Path("dianzhentong/backup.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.4"' in config
+    assert 'APP_VERSION = "4.4.1"' in config
     assert 'SCHEMA_VERSION = 3' in backup

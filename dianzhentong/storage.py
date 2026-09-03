@@ -598,7 +598,8 @@ class PracticeRepository:
             rows = connection.execute(
                 """SELECT s.completed_at, a.is_correct FROM quiz_answers a
                 JOIN quiz_sessions s ON s.quiz_id = a.quiz_id
-                WHERE a.question_id = ? ORDER BY s.completed_at, s.rowid, a.rowid""",
+                WHERE a.question_id = ? AND s.mode != 'textbook_example'
+                ORDER BY s.completed_at, s.rowid, a.rowid""",
                 (question_id,),
             ).fetchall()
         return [{"completed_at": row["completed_at"], "is_correct": bool(row["is_correct"])} for row in rows]
@@ -935,6 +936,8 @@ class MemoryPracticeRepository:
     def question_answer_history(self, question_id: str) -> list[dict[str, Any]]:
         result = []
         for record in sorted(self.quiz_records.values(), key=lambda item: item.completed_at):
+            if record.mode == "textbook_example":
+                continue
             for answer in record.answers:
                 if answer.question_id == question_id:
                     result.append({"completed_at": record.completed_at, "is_correct": answer.is_correct})

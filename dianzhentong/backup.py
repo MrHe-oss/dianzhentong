@@ -16,6 +16,7 @@ from .quiz import QUESTION_MAP, QuizAnswer, make_quiz_record
 from .storage import CapstoneTaskRecord, DiagramPracticeRecord, LearningActivity, PracticeRecord, beijing_now
 from .diagram_learning import DIAGRAM_CASES
 from .capstone import CAPSTONE_TASKS
+from .curriculum_catalog import BOOK_EDITION_MAPPINGS
 
 
 ARCHIVE_FORMAT = "dianzhentong-learning-archive"
@@ -122,7 +123,12 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         raise BackupValidationError("备份记录数量异常")
 
     catalog = KnowledgeBase.catalog()
-    chapters = {item["id"] for item in ALL_CHAPTERS}
+    chapters = {item["id"] for item in ALL_CHAPTERS} | {item.chapter_id for item in QUESTION_MAP.values()}
+    textbook_scopes = {
+        unit["quiz_chapter_ids"][0]: set(unit["quiz_chapter_ids"])
+        for book in BOOK_EDITION_MAPPINGS.values() for unit in book["chapters"]
+        if unit["quiz_chapter_ids"]
+    }
     course_chapter_ids = {course["id"]: {item["id"] for item in COURSE_CHAPTERS[course["id"]]} for course in COURSES}
     for item in data["practice_records"]:
         required = {"practice_id", "completed_at", "experiment_id", "scenario_id", "result_id", "matched", "correct_judgments", "total_judgments", "wrong_nodes", "uncertain_count"}
@@ -187,6 +193,8 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             question_id = answer["question_id"]
             valid_question_chapters = (course_chapter_ids[record_scope] if item["mode"] == "course_exam"
                                        else {record_scope})
+            if item["mode"] in {"textbook_unit_pretest", "textbook_unit_assessment"}:
+                valid_question_chapters = textbook_scopes.get(record_scope, {record_scope})
             if question_id in seen or question_id not in QUESTION_MAP or QUESTION_MAP[question_id].chapter_id not in valid_question_chapters:
                 raise BackupValidationError("测验题目无效或重复")
             seen.add(question_id)

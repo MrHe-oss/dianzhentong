@@ -103,7 +103,7 @@ make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
 UI_STATE_VERSION = "4.4"
-STORAGE_CACHE_VERSION = "4.4-plc-learning-loop"
+STORAGE_CACHE_VERSION = "4.4.1-review-reliability"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -187,8 +187,6 @@ def textbook_unit_state(book_id: str, chapter_index: int):
     learned = set().union(*(repository.learned_cards(item) for item in catalog))
     chapter_id = unit["quiz_chapter_ids"][0] if unit["quiz_chapter_ids"] else ""
     history = repository.quiz_history(chapter_id, 100) if chapter_id else []
-    if not unit["worked_example"].get("practice_question_id") and all(item in learned for item in unit["topic_ids"]):
-        history = [*history, {"mode": "textbook_example"}]
     return calculate_unit_progress(tuple(unit["topic_ids"]), learned, history)
 
 
@@ -287,18 +285,22 @@ def textbook_unit_effect(book_id: str, chapter_index: int) -> dict[str, object]:
     return {"before": before, "after": after,
             "improvement": after - before if before is not None and after is not None else None}
 
-def start_similar_quiz(question_id: str) -> None:
+def start_question_review(question_id: str, similar: bool = False) -> None:
     question = QUESTION_MAP[question_id]
-    related = similar_questions(question_id, 1)
+    related = similar_questions(question_id, 1) if similar else ()
     selected = related or (question,)
     context = TEXTBOOK_QUIZ_CONTEXT.get(question.chapter_id)
     st.session_state.quiz_state = {
-        "chapter_id": question.chapter_id, "mode": "similar_review",
+        "chapter_id": question.chapter_id, "mode": "similar_review" if similar else "original_review",
+        "quiz_id": secrets.token_hex(12), "review_question_id": question_id,
         "question_ids": [item.id for item in selected], "index": 0,
         "answers": [], "answered": False,
         **({"book_id": context[0], "book_chapter_index": context[1]} if context else {}),
     }
     set_stage(10)
+
+def start_similar_quiz(question_id: str) -> None:
+    start_question_review(question_id, similar=True)
 
 def start_diagram_training(case_id: str) -> None:
     st.session_state.diagram_training = DiagramTrainingSession(case_id).to_dict()
@@ -1276,7 +1278,8 @@ elif stage == 10:
         question_ids = quiz["question_ids"]
         index = min(int(quiz["index"]), len(question_ids) - 1)
         question = QUESTION_MAP[question_ids[index]]
-        st.subheader(f"📝 {quiz_title} · {'错题复习' if quiz['mode'] in {'wrong_review', 'similar_review'} else '单元测验'}")
+        quiz_label = {"original_review": "复习原错题", "similar_review": "相似题巩固", "wrong_review": "错题复习"}.get(quiz["mode"], "单元测验")
+        st.subheader(f"📝 {quiz_title} · {quiz_label}")
         st.progress((index + 1) / len(question_ids), text=f"第 {index + 1} / {len(question_ids)} 题")
         st.markdown(f"### {question.stem}")
         selected = st.radio(
@@ -1313,7 +1316,7 @@ elif stage == 10:
             if st.button("查看成绩" if index == len(question_ids) - 1 else "下一题", type="primary", use_container_width=True):
                 if index == len(question_ids) - 1:
                     answers = tuple(QuizAnswer(**item) for item in quiz["answers"])
-                    record = make_quiz_record(quiz["chapter_id"], answers, quiz["mode"])
+                    record = make_quiz_record(quiz["chapter_id"], answers, quiz["mode"], quiz_id=quiz.get("quiz_id"))
                     repository.save_quiz(record)
                     st.session_state.quiz_result_id = record.quiz_id
                     st.session_state.quiz_state = {**quiz, "record": {
@@ -1402,7 +1405,9 @@ elif stage == 11:
                 st.session_state.pop("review_origin", None); st.session_state.pop("quiz_state", None)
                 set_stage(18); st.rerun()
         if st.button("再测一次", use_container_width=True):
-            if unit_mode:
+            if quiz.get("mode") in {"original_review", "similar_review"}:
+                start_question_review(quiz.get("review_question_id", quiz["question_ids"][0]), similar=quiz["mode"] == "similar_review")
+            elif unit_mode:
                 start_textbook_unit_assessment(quiz["book_id"], quiz["book_chapter_index"], pretest=unit_pretest)
             else:
                 start_chapter_quiz(quiz["chapter_id"])
@@ -1773,7 +1778,7 @@ elif stage == 18:
         elif item.kind == "quiz":
             if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
                 st.session_state.review_origin = True
-                start_similar_quiz(item.reference_id); st.rerun()
+                start_question_review(item.reference_id); st.rerun()
         elif item.kind == "diagram":
             if st.button(f"开始第{index}项", key=f"review_task_{index}_{item.reference_id}", type="primary" if index == 1 else "secondary", use_container_width=True):
                 st.session_state.review_origin = True
@@ -1993,6 +1998,8 @@ elif stage == 20:
     progress_parts[0].metric("知识学习 · 40%", f"{current_unit_state.knowledge_completion:.0%}")
     progress_parts[1].metric("例题练习 · 20%", "已完成" if current_unit_state.example_completed else "待完成")
     progress_parts[2].metric("单元评测 · 40%", "已通过" if current_unit_state.assessment_passed else "待通过")
+    if not mapped_chapter["worked_example"].get("practice_question_id"):
+        st.caption("旧单元的例题没有单独完成记录，不根据知识点学习状态推断例题完成；原有课程成绩保持不变。")
     learning_effect = textbook_unit_effect(selected_book_id, chapter_index) if mapped_chapter["quiz_chapter_ids"] else {"before": None, "after": None, "improvement": None}
     if learning_effect["before"] is not None:
         effect_columns = st.columns(2)
