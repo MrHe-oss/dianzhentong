@@ -1,6 +1,7 @@
 """Pure, device-free PLC learning models and first-answer sessions."""
 from dataclasses import dataclass, field
 from uuid import uuid4
+from .plc_observation import Observation, TASKS, task_evidence, truth, format_inputs
 
 BOOK_ID = "electrical_control_plc_s71200_tong"
 SAFETY = "仅限抽象教学模拟；不连接设备，不表示实际接线、扫描时序或设备动作。"
@@ -86,6 +87,7 @@ class LabSession:
     running: bool = False
     last_observation: str = ""
     record: object = None
+    history: list = field(default_factory=list)
 
     def __post_init__(self):
         if self.lab_id not in LABS:
@@ -111,19 +113,63 @@ class LabSession:
             raise ValueError("请先完成预测")
         if self.lab_id == "logic":
             result = logic_output(operator, a, b)
-            self.last_observation = f"{operator}：A={a}，B={b if operator != 'NOT' else '不参与'} → 结果={result}"
+            before = self.history[-1].after if self.history else "尚未执行"
+            after = f"结果：{truth(result)}"
+            values = (("operator", operator), ("a", a), ("b", b))
+            reason = {"AND": "AND要求A与B同时成立。", "OR": "OR只要求A、B至少一个成立。",
+                      "NOT": "NOT将A取反；B不参与本次运算。"}[operator]
+            nodes = (("输入A", a),) + (() if operator == "NOT" else (("输入B", b),)) + (("结果", result),)
+            action = operator
+            self.last_observation = f"{operator}：A={truth(a)}，B={truth(b) if operator != 'NOT' else '不参与'} → 结果={truth(result)}"
         elif self.lab_id == "scan":
+            phase_index = self.scan.phase
+            before = f"快照缓存={truth(self.scan.sampled)}；计算缓存={truth(self.scan.computed)}；显示保留值={truth(self.scan.output)}"
+            if not self.history:
+                before = "快照、计算尚未执行；显示初始为假"
             phase = ("读取快照", "执行逻辑", "更新显示")[self.scan.phase]
             self.scan.step(a)
             result = self.scan.output
-            self.last_observation = f"已完成：{phase}；当前输入={a}；快照={self.scan.sampled}；计算值={self.scan.computed}；显示结果={result}"
+            after = f"快照={truth(self.scan.sampled)}；本轮计算={truth(self.scan.computed if phase_index >= 1 else None)}；显示保留值={truth(result)}"
+            values = (("phase", phase_index), ("live", a))
+            action = phase
+            reason = ("本步只读取输入形成快照，尚未执行本轮逻辑和更新显示。",
+                      "本步使用已读取快照计算，不使用读取之后变化的当前输入；显示仍保留上一轮值。",
+                      "本步把本轮计算值更新到显示；当前输入需在下一轮重新读取才参与计算。")[phase_index]
+            nodes = (("本轮快照", self.scan.sampled),
+                     ("本轮计算", self.scan.computed if phase_index >= 1 else None),
+                     ("本轮显示更新", result if phase_index == 2 else None))
+            self.last_observation = f"已完成：{phase}；执行时输入={truth(a)}；快照={truth(self.scan.sampled)}；显示保留值={truth(result)}"
         else:
             previous = self.running
             self.running = hold_next(allow, stop, start, previous)
             result = self.running
-            self.last_observation = f"许可={allow}，停止={stop}，启动={start}，先前运行={previous} → 运行={result}"
+            before, after = f"运行={truth(previous)}", f"运行={truth(result)}"
+            values = (("allow", allow), ("stop", stop), ("start", start), ("previous", previous))
+            action = "推进启停逻辑"
+            reason = ("许可未成立，启动与保持都不能使运行成立。" if not allow else
+                      "停止请求成立，NOT停止不成立，因此停止优先于启动和保持。" if stop else
+                      "启动请求成立，许可与停止条件也满足，因此运行成立。" if start else
+                      "虽然启动已撤回，但先前运行成立，保持分支继续满足。" if previous else
+                      "启动与先前运行均不成立，没有成立的启动或保持分支。")
+            nodes = (("运行许可", allow), ("NOT停止", not stop), ("启动或先前运行", start or previous), ("下一运行", result))
+            self.last_observation = f"许可={truth(allow)}，停止={truth(stop)}，启动={truth(start)}，先前运行={truth(previous)} → 运行={truth(result)}"
         self.observations += 1
+        previous_inputs = dict(self.history[-1].inputs) if self.history else {}
+        changes = tuple((key, value) for key, value in values if previous_inputs.get(key) != value)
+        changed_text = format_inputs(changes) if changes else "条件未改变，重新执行本步"
+        self.history.append(Observation(self.observations, action, values, before, after, reason, nodes, changed_text))
         return result
+
+    def observation_tasks(self):
+        done = task_evidence(self.lab_id, self.history)
+        return [(text, key in done) for key, text in TASKS[self.lab_id]]
+
+    def observation_report(self):
+        lines = ["观察任务（不计分）"]
+        lines.extend(f"{'已观察' if done else '尚未观察'}：{text}" for text, done in self.observation_tasks())
+        lines.append("操作记录仅保留在当前会话及下载报告中，不写入成绩或学习档案。")
+        lines.extend(event.text() for event in self.history)
+        return "\n\n".join(lines)
 
     def finish_observation(self):
         if self.phase != "observe" or not self.observations or (self.lab_id == "scan" and not self.scan.cycles):
@@ -149,4 +195,5 @@ class LabSession:
             lines.extend([q.stem, f"首次选择：{answer.selected_answer}；正确答案：{q.answer}", q.explanation])
         lines.extend(["最近一次观察：" + self.last_observation, "关联知识卡：" + LABS[self.lab_id]["card"],
                       "来源：Siemens S7-1200手册；抽象教学路径：部分核对。", SOURCE_URL])
+        lines.append(self.observation_report())
         return "\n".join(lines)

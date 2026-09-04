@@ -3,11 +3,30 @@ import streamlit as st
 from html import escape
 from .plc_lab import BOOK_ID, LABS, SAFETY, SCAN_NOTE, SOURCE_URL, LabSession
 from .quiz import QUESTION_MAP
+from .plc_observation import truth
+
+
+def render_observations(session, show_tasks=True):
+    st.markdown("### 本次观察与原因")
+    if show_tasks:
+        for text, done in session.observation_tasks():
+            st.write(f"{'✓ 已观察' if done else '○ 尚未观察'} · {text}")
+    if session.history:
+        latest = session.history[-1]
+        st.write(f"操作前：{latest.before}")
+        st.write(f"改变：{latest.changes}")
+        st.write(f"操作后：{latest.after}")
+        st.info(latest.explanation)
+        with st.expander(f"查看全部 {len(session.history)} 步变化记录"):
+            for event in session.history:
+                st.text(event.text())
+    st.caption("观察任务不计分、不改变旧成绩；记录仅保留在当前会话，可随报告下载。")
 
 
 def render_lab(repository, set_stage, open_topic, render_provenance, provenance_for_card):
     session = st.session_state.get("plc_lab_session")
     if (not isinstance(session, LabSession) or session.lab_id not in LABS
+            or not hasattr(session, "history")
             or session.phase not in {"intro", "predict", "observe", "transfer", "report"}):
         st.session_state.pop("plc_lab_session", None)
         set_stage(20)
@@ -16,6 +35,12 @@ def render_lab(repository, set_stage, open_topic, render_provenance, provenance_
     st.subheader(lab["title"])
     st.caption(SAFETY)
     st.write(lab["goal"])
+    st.markdown("""<style>.plc-nodes{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}
+    .plc-node{padding:.65rem;border-radius:10px;border:1px solid;overflow-wrap:anywhere}
+    .plc-yes{background:#ecfdf5;color:#065f46;border-color:#6ee7b7}
+    .plc-no{background:#fff7ed;color:#9a3412;border-color:#fdba74}
+    .plc-wait{background:#f1f5f9;color:#475569;border-color:#cbd5e1}
+    @media(max-width:640px){.plc-node{width:100%;box-sizing:border-box}}</style>""", unsafe_allow_html=True)
     phases = ("intro", "predict", "observe", "transfer", "report")
     st.progress((phases.index(session.phase) + 1) / len(phases),
                 text="任务 → 预测 → 互动观察 → 迁移题 → 学习报告")
@@ -37,6 +62,9 @@ def render_lab(repository, set_stage, open_topic, render_provenance, provenance_
         q = QUESTION_MAP[first.question_id]
         st.info(f"首次预测：{first.selected_answer}；正确答案：{q.answer}。{q.explanation}")
         st.markdown("### 改变条件，观察结果")
+        with st.expander("建议完成的观察任务", expanded=True):
+            for text, done in session.observation_tasks():
+                st.write(f"{'✓ 已观察' if done else '○ 尚未观察'} · {text}")
         prefix = session.session_id
         inputs = {}
         if session.lab_id == "logic":
@@ -61,15 +89,15 @@ def render_lab(repository, set_stage, open_topic, render_provenance, provenance_
             session.observe(**inputs); st.rerun()
         if session.last_observation:
             st.success(session.last_observation)
+        nodes = session.history[-1].nodes if session.history else (("逻辑执行", None),)
+        st.caption("最近执行的逻辑：绿色表示成立，橙色表示不成立，灰色表示本轮尚未执行。")
         if session.lab_id == "scan":
-            nodes = [f"输入快照：{session.scan.sampled}", f"逻辑计算：{session.scan.computed}",
-                     f"显示结果：{session.scan.output}"]
-        elif session.lab_id == "hold":
-            nodes = ["许可与停止条件", "启动或先前保持", f"已执行状态：{'运行' if session.running else '停止'}"]
-        else:
-            nodes = ["抽象输入A、B", inputs["operator"], "点击计算更新结果"]
-        st.markdown('<div class="dzt-flow">' + '<b>→</b>'.join(
-            '<span>' + escape(node) + '</span>' for node in nodes) + '</div>', unsafe_allow_html=True)
+            st.write(f"当前模拟输入：{truth(inputs['a'])}；它不等于已读取的快照。")
+        st.markdown('<div class="plc-nodes">' + ''.join(
+            f'<div class="plc-node plc-{"wait" if value is None else "yes" if value else "no"}">'
+            + escape(label) + '：' + truth(value) + '</div>' for label, value in nodes)
+            + '</div>', unsafe_allow_html=True)
+        render_observations(session, show_tasks=False)
         st.caption("输入改变后，请点击推进按钮；上方结果保留的是最近一次已执行的观察。")
         ready = session.observations > 0 and (session.lab_id != "scan" or session.scan.cycles > 0)
         if st.button("完成观察，做迁移题", key="lab_transfer", disabled=not ready):
@@ -81,6 +109,7 @@ def render_lab(repository, set_stage, open_topic, render_provenance, provenance_
             st.warning("存储不可用：本次成绩仅在当前会话内保存，刷新或重启可能丢失。")
         st.metric("首次判断正确数", f"{record.correct_count} / {record.total_count}")
         st.caption("已计入答题记录和错题复习，不改变原单元测验通过状态。云端记录可能丢失，请按需备份。")
+        render_observations(session)
         for answer in record.answers:
             q = QUESTION_MAP[answer.question_id]
             st.markdown("#### " + q.stem)

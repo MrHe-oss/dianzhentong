@@ -16,6 +16,6 @@ def test_all_three_textbook_units_have_complete_lessons():
 def test_v36_shows_unit_progress_and_project_summary():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.5"' in config and 'UI_STATE_VERSION = "4.5"' in app
+    assert 'APP_VERSION = "4.6"' in config and 'UI_STATE_VERSION = "4.6"' in app
     for phrase in ("教材项目学习进度", "教材知识学习", "当前上线教材项目的知识小课已完成", "selected_textbook_chapter"):
         assert phrase in app

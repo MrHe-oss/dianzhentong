@@ -104,8 +104,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.5"
-STORAGE_CACHE_VERSION = "4.5-plc-labs"
+UI_STATE_VERSION = "4.6"
+STORAGE_CACHE_VERSION = "4.6-plc-observations"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
