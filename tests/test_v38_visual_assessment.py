@@ -23,7 +23,7 @@ def test_textbook_unit_assessment_uses_seventy_percent_threshold():
 def test_v38_ui_has_visuals_assessment_and_mastery_states():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.7"' in config and 'UI_STATE_VERSION = "4.7"' in app
+    assert 'APP_VERSION = "4.8"' in config and 'UI_STATE_VERSION = "4.8"' in app
     for phrase in ("原理图解", "查看自锁状态变化演示", "开始学后评测", "单元评测报告", "单元掌握进度", "识图训练"):
         assert phrase in app
     assert "图中只表达抽象关系，不是接线图" in app

@@ -12,7 +12,7 @@ from .course import ALL_CHAPTERS, COURSES, COURSE_CHAPTERS, chapter_progress
 from .engine import KnowledgeBase
 from .learning import KNOWLEDGE_CARDS, cards_for_experiment
 from .progress import calculate_experiment_progress, learning_streak, beijing_today
-from .quiz import QUESTION_MAP, QuizAnswer, make_quiz_record
+from .quiz import QUESTION_MAP, QuizAnswer, make_quiz_record, is_correct_answer
 from .storage import CapstoneTaskRecord, DiagramPracticeRecord, LearningActivity, PracticeRecord, beijing_now
 from .diagram_learning import DIAGRAM_CASES
 from .capstone import CAPSTONE_TASKS
@@ -204,9 +204,13 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             if answer["correct_answer"] != QUESTION_MAP[question_id].answer:
                 raise BackupValidationError("测验正确答案被篡改")
             allowed_answers = set(QUESTION_MAP[question_id].options) | {"不确定"}
-            if answer["selected_answer"] not in allowed_answers:
+            if not QUESTION_MAP[question_id].numeric_unit and answer["selected_answer"] not in allowed_answers:
                 raise BackupValidationError("用户答案不属于题目选项")
-            if is_correct != (answer["selected_answer"] == answer["correct_answer"]):
+            try:
+                expected_correct = is_correct_answer(QUESTION_MAP[question_id], answer["selected_answer"])
+            except ValueError as error:
+                raise BackupValidationError("数值答案或单位无效") from error
+            if is_correct != expected_correct:
                 raise BackupValidationError("单题得分与答案不一致")
             if answer["uncertain"] != (answer["selected_answer"] == "不确定"):
                 raise BackupValidationError("不确定状态与答案不一致")

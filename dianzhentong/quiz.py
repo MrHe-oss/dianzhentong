@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Sequence
 
 from .storage import beijing_now
+from .numeric_learning import circuit_question_specs, numeric_correct
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class QuizQuestion:
     answer: str
     explanation: str
     knowledge_point: str
+    numeric_unit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +167,8 @@ from .plc_lab import question_specs
 
 QUESTIONS += tuple(QuizQuestion(**{key: value for key, value in row.items() if key != "card"})
                    for row in question_specs())
+QUESTIONS += tuple(QuizQuestion(**{key: value for key, value in row.items() if key != "card"})
+                   for row in circuit_question_specs())
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -206,17 +210,28 @@ QUESTION_CARD_MAP = {
 
 
 QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in question_specs()})
+QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in circuit_question_specs()})
 
 
 def card_id_for_question(question_id: str) -> str:
     return QUESTION_CARD_MAP[question_id]
 
 
+def is_correct_answer(question: QuizQuestion, selected_answer: str) -> bool:
+    if not question.numeric_unit:
+        return selected_answer == question.answer
+    if selected_answer == "不确定":
+        return False
+    return numeric_correct(selected_answer, question.answer, question.numeric_unit)
+
+
 def answer_feedback(question: QuizQuestion, selected_answer: str) -> str:
-    if selected_answer == question.answer:
+    if is_correct_answer(question, selected_answer):
         return f"你的选择与本题考查的“{question.knowledge_point}”一致。"
     if selected_answer == "不确定":
         return f"本题已经给出足够的教学条件；对照“{question.knowledge_point}”后可以确定答案。"
+    if question.numeric_unit:
+        return "先统一单位，再列式代入。请检查毫与千的换算，以及功率和能量的区别。"
     return (
         f"“{selected_answer}”没有满足题目中的关键条件。"
         f"本题应依据“{question.knowledge_point}”判断，而不是扩大到题目未提供的条件。"

@@ -9,20 +9,21 @@ from dianzhentong.quiz import QUESTIONS, card_id_for_question
 def test_all_learning_content_is_traceable():
     assert set(CARD_PROVENANCE) == set(KNOWLEDGE_CARDS)
     question_cards = [card_id_for_question(item.id) for item in QUESTIONS]
-    assert len(QUESTIONS) == 116
+    assert len(QUESTIONS) == 126
     assert all(provenance_for_question(card_id) for card_id in question_cards)
     assert len(RESULT_PROVENANCE) == 20
     assert len(DIAGRAM_CASES) == 22
     assert all(provenance_for_diagram(case["card_ids"])["sources"] for case in DIAGRAM_CASES.values())
     coverage = coverage_summary(question_cards, [case["card_ids"] for case in DIAGRAM_CASES.values()])
-    assert coverage["questions"] == coverage["question_total"] == 116
+    assert coverage["questions"] == coverage["question_total"] == 126
     assert coverage["diagrams"] == coverage["diagram_total"] == 22
 
 def test_sources_have_auditable_metadata_and_no_vague_labels():
     for source in SOURCES.values():
         assert source["url"].startswith("https://")
-        assert source["publisher"] in {"ABB", "Schneider Electric", "Siemens"}
-        assert source["checked_on"] == "2026-08-31"
+        assert source["publisher"] in {"ABB", "Schneider Electric", "Siemens", "OpenStax / Rice University"}
+        from datetime import date
+        date.fromisoformat(source["checked_on"])
         assert source["scope"]
         assert "某教材" not in source["title"] and "网络资料" not in source["title"]
 

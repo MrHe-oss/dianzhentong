@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 
 CONTENT_ROOT = Path(__file__).resolve().parent / "content" / "textbooks"
+TEXTBOOK_IDS = ("electrical_control_plc_s71200_tong", "circuit_foundations")
 LESSON_FIELDS = {"minutes", "lead", "points", "example", "question", "options", "answer", "explanation"}
 UNIT_FIELDS = {"id", "source_title", "title", "goal", "topic_ids", "case_ids", "experiment_ids", "quiz_chapter_ids", "topics", "worked_example"}
 
@@ -25,7 +26,11 @@ def validate_textbook_content(data: dict[str, Any]) -> None:
     if data.get("schema_version") != 1:
         raise ContentValidationError("不支持的教材内容版本")
     book, project = data.get("book", {}), data.get("project", {})
-    required_book = ("id", "title", "edition", "author", "publisher", "isbn", "published_at", "source_url", "notice")
+    required_book = ("id", "title", "edition", "author", "publisher", "published_at", "source_url", "notice")
+    if book.get("kind", "textbook") != "original":
+        required_book += ("isbn",)
+    elif book.get("isbn"):
+        raise ContentValidationError("原创课程不能使用教材ISBN")
     if not all(_nonempty(book.get(field)) for field in required_book):
         raise ContentValidationError("教材元数据不完整")
     source = urlparse(book["source_url"])
@@ -90,7 +95,11 @@ def load_textbook_projects(book_id: str) -> tuple[dict[str, Any], ...]:
             projects.append(load_textbook_content(book_id, f"project_{suffix}"))
     if not projects:
         raise ContentValidationError(f"教材项目不存在：{book_id}")
-    identity = (projects[0]["book"]["id"], projects[0]["book"]["isbn"])
-    if any((item["book"]["id"], item["book"]["isbn"]) != identity for item in projects):
+    identity = (projects[0]["book"]["id"], projects[0]["book"].get("isbn"))
+    if any((item["book"]["id"], item["book"].get("isbn")) != identity for item in projects):
         raise ContentValidationError("同一教材目录中的项目元数据不一致")
     return tuple(projects)
+
+
+def all_textbook_projects():
+    return tuple(project for book_id in TEXTBOOK_IDS for project in load_textbook_projects(book_id))

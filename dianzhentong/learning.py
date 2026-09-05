@@ -190,6 +190,12 @@ KNOWLEDGE_CARDS: dict[str, dict[str, str]] = {
     "plc_monitoring_boundary": {"title":"监控与调试安全边界","principle":"教学监控用于观察模拟状态，不能替代真实设备风险评估与安全规程。","role":"明确软件学习与现场操作的边界。","normal":"只使用离线或模拟资料完成判断。","abnormal":"依据平台内容直接控制真实设备。","review":"本平台不提供下载、送电或强制变量指导。"},
 }
 
+from .content_loader import all_textbook_projects
+
+KNOWLEDGE_CARDS.update({topic["id"]: topic["card"]
+                        for content in all_textbook_projects() for unit in content["project"]["units"]
+                        for topic in unit["topics"] if "card" in topic})
+
 NODE_CARD_MAP: dict[str, str] = {
     "control_power": "control_power",
     "fuse": "fuse", "fr_fuse": "fuse",

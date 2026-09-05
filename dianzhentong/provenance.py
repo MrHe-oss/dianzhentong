@@ -24,6 +24,15 @@ SOURCES: dict[str, dict[str, str]] = {
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
     return {"principle": principle, "sources": sources, "status": status}
 
+for source_id, section, title, scope in (
+    ("openstax_current", "9-1-electrical-current", "Electrical Current", "平均电流、安培与约定电流方向"),
+    ("openstax_ohm", "9-4-ohms-law", "Ohm's Law", "线性电阻的电压、电流关系与适用条件"),
+    ("openstax_power", "9-5-electrical-energy-and-power", "Electrical Energy and Power", "直流电阻的功率与能量关系"),
+):
+    SOURCES[source_id] = {"title": f"University Physics Volume 2 · {title}", "publisher": "OpenStax / Rice University",
+                          "url": f"https://openstax.org/books/university-physics-volume-2/pages/{section}",
+                          "type": "开放大学教材", "scope": scope, "checked_on": "2026-09-05"}
+
 CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "control_power": _item("控制电源是接触器控制逻辑的前置条件。", ("abb_dol", "abb_contactor")),
     "fuse": _item("保护元件属于电动机启动控制组合的公共环节。", ("abb_dol", "abb_motor_control"), STATUS_VERIFIED),
@@ -59,6 +68,12 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "plc_compile_check": _item("编译检查工程规则，但不能单独证明控制逻辑与安全要求正确。", ("siemens_s71200_manual",)),
     "plc_monitoring_boundary": _item("真实PLC调试必须遵循厂家资料和现场安全要求。", ("siemens_s71200_manual",)),
 }
+
+CARD_PROVENANCE.update({
+    "dc_current_units": _item("平均电流为净电荷量与时间间隔之比；电流采用正电荷运动方向。", ("openstax_current",)),
+    "dc_ohm_law": _item("理想线性电阻在关联参考方向下U=RI。", ("openstax_ohm",)),
+    "dc_resistor_power": _item("本单元直流电阻P=UI=U²/R；恒定功率下E=Pt。", ("openstax_power", "openstax_ohm")),
+})
 
 RESULT_CARD_MAP = {
     "cause_control_power":"control_power", "cause_fuse":"fuse", "cause_thermal":"thermal_relay", "cause_stop":"button_contacts", "cause_start":"button_contacts", "cause_coil":"contactor_coil",

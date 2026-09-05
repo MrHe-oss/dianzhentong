@@ -17,7 +17,7 @@ def test_learning_platform_has_courses_topics_and_safe_book_mapping():
         assert set(book["course_ids"]) <= course_ids
         assert book["official"] is False
         assert "非出版社官方" in book["notice"]
-        assert book["isbn"]
+        assert not book["isbn"] if book.get("kind") == "original" else book["isbn"]
         for index, chapter in enumerate(book["chapters"]):
             topics = topics_for_book_chapter(book["id"], index)
             assert topics and {item["id"] for item in topics} == set(chapter["topic_ids"])

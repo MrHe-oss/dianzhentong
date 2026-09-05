@@ -61,6 +61,7 @@ from dianzhentong.curriculum_catalog import (
     topics_for_book_chapter,
 )
 from dianzhentong.textbook_learning import calculate_unit_progress, lesson_for_topic
+from dianzhentong.circuit_ui import numeric_answer_input, render_resistor_explorer
 from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
 from dianzhentong.plc_lab_ui import render_lab
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
@@ -89,6 +90,7 @@ from dianzhentong.quiz import (
     questions_for_chapter,
     select_questions,
     similar_questions,
+    is_correct_answer,
 )
 import dianzhentong.storage as storage_module
 
@@ -104,8 +106,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.7"
-STORAGE_CACHE_VERSION = "4.6-plc-observations"
+UI_STATE_VERSION = "4.8"
+STORAGE_CACHE_VERSION = "4.8-circuit-learning"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -255,6 +257,7 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
     selected = select_questions(chapter_id, 5, wrong_ids)
     st.session_state.quiz_state = {
         "chapter_id": chapter_id,
+        "quiz_id": secrets.token_hex(12),
         "mode": "wrong_review" if review else "chapter_quiz",
         "question_ids": [item.id for item in selected],
         "index": 0,
@@ -271,6 +274,7 @@ def start_textbook_unit_assessment(book_id: str, chapter_index: int, pretest: bo
     selected = secrets.SystemRandom().sample(pool, min(count, len(pool)))
     st.session_state.quiz_state = {
         "chapter_id": unit["quiz_chapter_ids"][0],
+        "quiz_id": secrets.token_hex(12),
         "mode": "textbook_unit_pretest" if pretest else "textbook_unit_assessment",
         "question_ids": [item.id for item in selected], "index": 0, "answers": [], "answered": False,
         "book_id": book_id, "book_chapter_index": chapter_index,
@@ -468,8 +472,7 @@ with st.sidebar:
             st.link_button("🛠️ 程序故障或专业纠错", config.issues_url, use_container_width=True)
     wrong_count = len(repository.wrong_question_ids())
     if wrong_count and st.button(f"📝 错题复习（{wrong_count}）", use_container_width=True):
-        wrong_chapter = next((item["id"] for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"])), CHAPTERS[0]["id"])
-        start_chapter_quiz(wrong_chapter, True); st.rerun()
+        set_stage(18); st.rerun()
     if session.history:
         st.metric("已记录检查", len(session.history))
         with st.expander("查看检查记录"):
@@ -479,14 +482,15 @@ with st.sidebar:
         reset_all(); st.rerun()
 
 if stage == 1:
-    book_id = next(iter(BOOK_EDITION_MAPPINGS))
+    st.subheader("今天想学什么？")
+    book_id = st.selectbox("选择学习路线", tuple(BOOK_EDITION_MAPPINGS),
+                           format_func=lambda item: BOOK_EDITION_MAPPINGS[item]["title"], key="home_book_selection")
     home_book = BOOK_EDITION_MAPPINGS[book_id]
     book_state = textbook_progress(book_id)
     last_chapter_id = st.session_state.get("last_learning_chapter_id")
     valid_chapter_ids = {item["id"] for item in ALL_CHAPTERS}
     last_chapter = chapter_by_id(last_chapter_id) if last_chapter_id in valid_chapter_ids else ALL_CHAPTERS[0]
     st.markdown('<div class="dzt-section-label">Start learning</div>', unsafe_allow_html=True)
-    st.subheader("今天想学什么？")
     home_query = st.text_input("查找知识、公式或例题", placeholder="输入你正在学习的内容，例如：自锁、PLC、接触器", key="home_search")
     if home_query.strip():
         home_results = search_textbooks(TEXTBOOK_SEARCH_INDEX, home_query, limit=6)
@@ -499,10 +503,12 @@ if stage == 1:
     st.markdown(
         f'<div class="dzt-dashboard"><h3>📘 {home_book["title"]}</h3>'
         f'<p>{home_book["author"]} · {home_book["edition"]}</p>'
-        f'<p>当前试点教材 · 已学习 {book_state["learned"]}/{book_state["total"]} 个知识点</p></div>',
+        f'<p>{"原创基础课程" if home_book.get("kind") == "original" else "当前试点教材"} · 已学习 {book_state["learned"]}/{book_state["total"]} 个知识点</p></div>',
         unsafe_allow_html=True,
     )
     if st.button("进入教材学习", type="primary", use_container_width=True):
+        st.session_state.selected_textbook_id = book_id
+        st.session_state.selected_textbook_chapter = 0
         set_stage(20); st.rerun()
     recent_lessons = repository.recent_textbook_visits(1)
     if recent_lessons:
@@ -1295,17 +1301,20 @@ elif stage == 10:
         st.subheader(f"📝 {quiz_title} · {quiz_label}")
         st.progress((index + 1) / len(question_ids), text=f"第 {index + 1} / {len(question_ids)} 题")
         st.markdown(f"### {question.stem}")
-        selected = st.radio(
-            "请选择一个答案", [*question.options, "不确定"], index=None,
-            key=f"quiz_choice_{question.id}_{index}",
-        )
+        if question.numeric_unit:
+            selected = numeric_answer_input(question, f"numeric_{quiz.get('quiz_id', 'legacy')}_{question.id}_{index}", disabled=quiz["answered"])
+        else:
+            selected = st.radio(
+                "请选择一个答案", [*question.options, "不确定"], index=None,
+                key=f"quiz_choice_{question.id}_{index}",
+            )
         if not quiz["answered"]:
             if st.button("提交答案", type="primary", disabled=selected is None, use_container_width=True):
                 answer = QuizAnswer(
                     question_id=question.id,
                     selected_answer=selected,
                     correct_answer=question.answer,
-                    is_correct=selected == question.answer,
+                    is_correct=is_correct_answer(question, selected),
                     uncertain=selected == "不确定",
                 )
                 quiz["answers"].append({
@@ -1342,7 +1351,10 @@ elif stage == 10:
                     st.session_state.quiz_state = quiz
                 st.rerun()
         if st.button("退出测验", use_container_width=True):
-            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None); set_stage(8); st.rerun()
+            st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None)
+            if textbook_context:
+                st.session_state.selected_textbook_id, st.session_state.selected_textbook_chapter = textbook_context
+            set_stage(20 if textbook_context else 8); st.rerun()
 
 elif stage == 11:
     quiz = st.session_state.get("quiz_state", {})
@@ -1970,8 +1982,12 @@ elif stage == 20:
     book_metrics[0].metric("作者", book["author"])
     book_metrics[1].metric("出版社", book["publisher"])
     book_metrics[2].metric("已上线项目", len(book.get("projects", ())))
-    st.write(f"**ISBN：** {book['isbn']} · **出版时间：** {book['published_at']}")
-    st.link_button("查看出版社公开书目信息", book["source_url"], use_container_width=True)
+    if book.get("kind") == "original":
+        st.caption(f"原创基础课程 · 首次上线 {book['published_at']} · 学习目标见各单元")
+        st.link_button("查看原理参考资料", book["source_url"], use_container_width=True)
+    else:
+        st.write(f"**ISBN：** {book['isbn']} · **出版时间：** {book['published_at']}")
+        st.link_button("查看出版社公开书目信息", book["source_url"], use_container_width=True)
     st.caption(book["notice"])
     learned_topic_ids = set().union(*(repository.learned_cards(item) for item in catalog))
     st.markdown("### 教材项目学习进度")
@@ -1992,6 +2008,8 @@ elif stage == 20:
     st.progress(project_completed / len(all_book_topic_ids), text=f"教材知识学习 {project_completed}/{len(all_book_topic_ids)}")
     if project_completed == len(all_book_topic_ids):
         st.success("当前上线教材项目的知识小课已完成。可继续使用已有配套练习、识图和实训进行巩固。")
+    if st.session_state.get("selected_textbook_chapter") not in range(len(book["chapters"])):
+        st.session_state.selected_textbook_chapter = 0
     chapter_index = st.selectbox(
         "选择章节", range(len(book["chapters"])),
         format_func=lambda item: f"{book['chapters'][item]['project_title']} · {book['chapters'][item]['title']}",
@@ -2036,7 +2054,7 @@ elif stage == 20:
             )
             if st.button("学习这个知识点", key=f"book_topic_{topic['id']}", use_container_width=True):
                 open_textbook_topic(selected_book_id, chapter_index, topic["id"]); st.rerun()
-    unit_example = example_for_unit(chapter_index)
+    unit_example = example_for_unit(chapter_index, selected_book_id)
     with st.expander(f"🧩 {unit_example['title']}"):
         st.write(f"**题目：** {unit_example['scenario']}")
         for step_index, step in enumerate(unit_example["steps"], 1):
@@ -2054,6 +2072,10 @@ elif stage == 20:
         elif overview_variant:
             st.warning(f"请重新分析。{unit_example['practice_explanation']}")
         st.caption("平台原创例题，不是教材原题或课后题答案。")
+    if selected_book_id == "circuit_foundations":
+        with st.expander("互动观察：欧姆定律与功率"):
+            render_resistor_explorer("circuit_unit")
+
     unit_labs = {key: lab for key, lab in LABS.items()
                  if selected_book_id == PLC_BOOK_ID and chapter_index == lab["unit"]}
     if unit_labs:
@@ -2097,7 +2119,8 @@ elif stage == 20:
         if action_columns[2].button("开始引导实训", key=f"book_experiment_start_{chapter_index}", use_container_width=True):
             prepare_task(mapped_experiment_id, "引导学习模式"); st.rerun()
     else:
-        action_columns[2].info("本单元使用识图和课程综合实训，暂不提供独立故障模拟。")
+        action_columns[2].info("本单元通过数值练习与互动观察巩固。" if selected_book_id == "circuit_foundations"
+                               else "本单元使用识图和课程综合实训，暂不提供独立故障模拟。")
     st.warning(book["notice"] + " 平台内容为原创讲解与训练，不替代纸质或正版电子教材。")
     if st.button("返回学习首页", use_container_width=True): set_stage(1); st.rerun()
 
@@ -2201,15 +2224,18 @@ elif stage == 24:
             st.write(card["review"])
             formulas = formulas_for_topic(topic_id)
             if formulas:
-                st.markdown("### 抽象逻辑公式")
+                st.markdown("### 公式与适用条件" if book.get("kind") == "original" else "### 抽象逻辑公式")
                 for formula in formulas:
                     st.write(f"**{formula['title']}**")
                     st.latex(formula["expression"])
                     for symbol in formula["symbols"]:
                         st.write(f"- {symbol}")
                     st.caption(formula["meaning"])
-                st.caption("公式表达控制逻辑关系，不代表真实接线方式。")
-            unit_example = example_for_unit(chapter_index)
+                st.caption("数值用于题设理想模型，请先统一单位。" if book.get("kind") == "original" else "公式表达控制逻辑关系，不代表真实接线方式。")
+            if book_id == "circuit_foundations" and topic_id in {"dc_ohm_law", "dc_resistor_power"}:
+                with st.expander("改变参数，观察公式的含义"):
+                    render_resistor_explorer(f"circuit_lesson_{topic_id}")
+            unit_example = example_for_unit(chapter_index, book_id)
             with st.expander("原创例题与分步解析"):
                 st.write(f"**题目：** {unit_example['scenario']}")
                 for step_index, step in enumerate(unit_example["steps"], 1):
@@ -2341,8 +2367,7 @@ elif stage == 21:
         wrong_count = len(repository.wrong_question_ids())
         st.markdown(f'<div class="dzt-card"><h3>错题复习</h3><p>当前记录到 {wrong_count} 道待巩固错题。</p></div>', unsafe_allow_html=True)
         if st.button("开始错题复习", disabled=wrong_count == 0, use_container_width=True):
-            target = next(item for item in ALL_CHAPTERS if repository.wrong_question_ids(item["id"]))
-            start_chapter_quiz(target["id"], True); st.rerun()
+            set_stage(18); st.rerun()
     unlocked_courses = [course for course in COURSES if course_is_unlocked(repository, course["id"])]
     selected_practice_course = st.selectbox(
         "选择课程", [course["id"] for course in unlocked_courses],

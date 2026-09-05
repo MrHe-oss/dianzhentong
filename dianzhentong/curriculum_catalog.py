@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .course import COURSE_CHAPTERS, COURSES
-from .content_loader import load_textbook_projects
+from .content_loader import load_textbook_projects, TEXTBOOK_IDS
 from .learning import KNOWLEDGE_CARDS
 
 
@@ -32,22 +32,23 @@ KNOWLEDGE_TOPICS: dict[str, dict[str, Any]] = {
 
 
 # 教材映射来自结构化内容文件；不收录教材正文、插图或课后题。
-_TEXTBOOK_PROJECTS = load_textbook_projects("electrical_control_plc_s71200_tong")
-_TEXTBOOK_CONTENT = _TEXTBOOK_PROJECTS[0]
-_BOOK = _TEXTBOOK_CONTENT["book"]
-BOOK_EDITION_MAPPINGS: dict[str, dict[str, Any]] = {
-    _BOOK["id"]: {
-        **_BOOK,
-        "course_ids": tuple(_BOOK["course_ids"]),
+def _book_mapping(book_id):
+    projects = load_textbook_projects(book_id)
+    book = projects[0]["book"]
+    return {
+        **book,
+        "course_ids": tuple(book["course_ids"]),
         "projects": tuple({"id": item["project"]["id"], "title": item["project"]["title"]}
-                          for item in _TEXTBOOK_PROJECTS),
+                          for item in projects),
         "chapters": tuple({
             **{key: tuple(value) if key in {"topic_ids", "case_ids", "experiment_ids", "quiz_chapter_ids"} else value
                for key, value in unit.items() if key not in {"id", "topics"}},
             "project_id": content["project"]["id"], "project_title": content["project"]["title"],
-        } for content in _TEXTBOOK_PROJECTS for unit in content["project"]["units"]),
+        } for content in projects for unit in content["project"]["units"]),
     }
-}
+
+
+BOOK_EDITION_MAPPINGS: dict[str, dict[str, Any]] = {book_id: _book_mapping(book_id) for book_id in TEXTBOOK_IDS}
 
 
 def books_for_course(course_id: str) -> tuple[dict[str, Any], ...]:
@@ -65,7 +66,7 @@ def validate_curriculum_catalog() -> None:
     for book_id, book in BOOK_EDITION_MAPPINGS.items():
         if not set(book["course_ids"]) <= course_ids or not book["chapters"]:
             raise ValueError(f"教材映射课程无效：{book_id}")
-        if not all(book.get(field) for field in ("title", "edition", "author", "publisher", "isbn", "source_url", "notice")):
+        if not all(book.get(field) for field in ("title", "edition", "author", "publisher", "source_url", "notice")):
             raise ValueError(f"教材元数据不完整：{book_id}")
         topic_ids = [topic_id for chapter in book["chapters"] for topic_id in chapter["topic_ids"]]
         if len(topic_ids) != len(set(topic_ids)) or not set(topic_ids) <= set(KNOWLEDGE_TOPICS):

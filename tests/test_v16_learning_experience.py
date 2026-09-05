@@ -19,10 +19,14 @@ def solve(knowledge: KnowledgeBase, scenario_id: str) -> DiagnosticSession:
 
 
 def test_every_question_has_unique_options_answer_explanation_and_card():
-    assert len(QUESTIONS) == 116
+    assert len(QUESTIONS) == 126
     for question in QUESTIONS:
         assert len(question.options) == len(set(question.options))
-        assert question.answer in question.options
+        if question.numeric_unit:
+            from dianzhentong.quiz import is_correct_answer
+            assert is_correct_answer(question, question.answer)
+        else:
+            assert question.answer in question.options
         assert question.explanation and question.knowledge_point
         assert card_id_for_question(question.id) in KNOWLEDGE_CARDS
         assert answer_feedback(question, "不确定")

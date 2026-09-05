@@ -4,11 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .content_loader import load_textbook_projects
+from .content_loader import all_textbook_projects
 
 
 BOOK_ID = "electrical_control_plc_s71200_tong"
-_CONTENTS = load_textbook_projects(BOOK_ID)
+_CONTENTS = all_textbook_projects()
 _UNITS = tuple(unit for content in _CONTENTS for unit in content["project"]["units"])
 
 SAMPLE_UNIT_TOPIC_IDS = tuple(_UNITS[0]["topic_ids"])
