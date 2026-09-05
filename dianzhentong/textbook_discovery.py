@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from .content_loader import load_textbook_projects
+from .learning import KNOWLEDGE_CARDS
 
 
 def build_textbook_index(book_ids: Iterable[str]) -> tuple[dict[str, Any], ...]:
@@ -27,7 +28,8 @@ def build_textbook_index(book_ids: Iterable[str]) -> tuple[dict[str, Any], ...]:
                 })
                 for topic in unit["topics"]:
                     lesson = topic["lesson"]
-                    search_parts = [book["title"], unit["title"], topic["id"], lesson["lead"], lesson["example"]]
+                    title = topic.get("title") or KNOWLEDGE_CARDS.get(topic["id"], {}).get("title", topic["id"])
+                    search_parts = [title, book["title"], unit["title"], topic["id"], lesson["lead"], lesson["example"]]
                     search_parts.extend(lesson["points"])
                     search_parts.extend(
                         f"{formula['title']} {formula['meaning']} {' '.join(formula['symbols'])}"
@@ -35,7 +37,7 @@ def build_textbook_index(book_ids: Iterable[str]) -> tuple[dict[str, Any], ...]:
                     )
                     entries.append({
                         "kind": "知识点", "book_id": book_id, "chapter_index": chapter_index,
-                        "topic_id": topic["id"], "title": topic.get("title") or topic["id"],
+                        "topic_id": topic["id"], "title": title,
                         "subtitle": lesson["lead"], "search_text": " ".join(search_parts),
                     })
                 example = unit["worked_example"]

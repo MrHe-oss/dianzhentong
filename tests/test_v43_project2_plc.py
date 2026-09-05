@@ -44,6 +44,6 @@ def test_project2_has_siemens_source_mapping_and_safe_scope():
 def test_v43_ui_exposes_multiple_projects_without_fake_training():
     app = open("app.py", encoding="utf-8").read()
     config = open("dianzhentong/config.py", encoding="utf-8").read()
-    assert 'APP_VERSION = "4.6"' in config and 'UI_STATE_VERSION = "4.6"' in app
+    assert 'APP_VERSION = "4.7"' in config and 'UI_STATE_VERSION = "4.7"' in app
     for phrase in ("已上线项目", "教材项目学习进度", "本项目专项题库将在后续版本加入", "本项目互动训练正在建设"):
         assert phrase in app

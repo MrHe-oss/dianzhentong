@@ -104,7 +104,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.6"
+UI_STATE_VERSION = "4.7"
 STORAGE_CACHE_VERSION = "4.6-plc-observations"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -487,6 +487,15 @@ if stage == 1:
     last_chapter = chapter_by_id(last_chapter_id) if last_chapter_id in valid_chapter_ids else ALL_CHAPTERS[0]
     st.markdown('<div class="dzt-section-label">Start learning</div>', unsafe_allow_html=True)
     st.subheader("今天想学什么？")
+    home_query = st.text_input("查找知识、公式或例题", placeholder="输入你正在学习的内容，例如：自锁、PLC、接触器", key="home_search")
+    if home_query.strip():
+        home_results = search_textbooks(TEXTBOOK_SEARCH_INDEX, home_query, limit=6)
+        if not home_results:
+            st.info("当前上线内容中没有找到。试试更短的关键词，或进入教材查看已上线单元。")
+        for result_index, result in enumerate(home_results):
+            st.caption(f"{result['kind']} · {result['subtitle']}")
+            if st.button(result["title"], key=f"home_result_{result_index}", use_container_width=True):
+                open_search_result(result); st.rerun()
     st.markdown(
         f'<div class="dzt-dashboard"><h3>📘 {home_book["title"]}</h3>'
         f'<p>{home_book["author"]} · {home_book["edition"]}</p>'
@@ -2117,6 +2126,11 @@ elif stage == 24:
             st.markdown('<div class="dzt-section-label">Textbook lesson</div>', unsafe_allow_html=True)
             st.caption(f"{book['title']}  ›  {mapped_chapter['title']}  ›  知识点 {topic_index + 1}/{len(topic_ids)}")
             st.subheader(card["title"])
+            with st.expander("本单元学习目录"):
+                for directory_id in topic_ids:
+                    if st.button(KNOWLEDGE_CARDS[directory_id]["title"], key=f"lesson_directory_{directory_id}",
+                                 disabled=directory_id == topic_id, use_container_width=True):
+                        open_textbook_topic(book_id, chapter_index, directory_id); st.rerun()
             is_bookmarked = any(
                 item["book_id"] == book_id and item["topic_id"] == topic_id
                 for item in repository.textbook_bookmarks()
@@ -2222,14 +2236,31 @@ elif stage == 24:
                 st.rerun()
             if lesson and topic_id not in learned:
                 st.caption("完成即时检查后即可记录本节进度。")
-            lesson_actions = st.columns(2)
+            lesson_actions = st.columns(3)
+            if topic_index > 0:
+                if lesson_actions[2].button("上一个知识点", use_container_width=True):
+                    open_textbook_topic(book_id, chapter_index, topic_ids[topic_index - 1]); st.rerun()
             if topic_index + 1 < len(topic_ids):
                 if lesson_actions[0].button("下一个知识点", type="primary", use_container_width=True):
-                    st.session_state.textbook_context["topic_id"] = topic_ids[topic_index + 1]
-                    st.rerun()
+                    open_textbook_topic(book_id, chapter_index, topic_ids[topic_index + 1]); st.rerun()
             else:
-                lesson_actions[0].success("本单元知识点已浏览完成")
+                lesson_actions[0].info("已到本单元最后一个知识点")
+                remaining = [item for item in topic_ids if item not in learned]
+                if remaining:
+                    st.caption(f"本单元还有 {len(remaining)} 个知识点未完成学习检查。")
+                    if st.button("继续未完成的知识点", key="continue_unfinished_topic", use_container_width=True):
+                        open_textbook_topic(book_id, chapter_index, remaining[0]); st.rerun()
+                if mapped_chapter["quiz_chapter_ids"]:
+                    if st.button("用单元测验检查理解", key="lesson_unit_assessment", type="primary", use_container_width=True):
+                        start_textbook_unit_assessment(book_id, chapter_index); st.rerun()
+                for lab_id, lab in LABS.items():
+                    if book_id == PLC_BOOK_ID and chapter_index == lab["unit"]:
+                        if st.button(f"动手理解 · {lab['title']}", key=f"lesson_lab_{lab_id}", use_container_width=True):
+                            st.session_state.plc_lab_session = LabSession(lab_id)
+                            set_stage(26); st.rerun()
             if lesson_actions[1].button("返回本单元", use_container_width=True):
+                st.session_state.selected_textbook_id = book_id
+                st.session_state.selected_textbook_chapter = chapter_index
                 st.session_state.pop("textbook_context", None)
                 set_stage(20); st.rerun()
             st.caption("本页属于教材知识学习，不是故障诊断或真实设备操作指导。")
