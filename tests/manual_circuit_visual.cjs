@@ -8,10 +8,8 @@ const os = require('os');
     for (const width of [1280, 390]) {
       const page = await browser.newPage({viewport: {width, height: 900}});
       await page.goto(process.env.LAB_URL || 'http://localhost:8515');
-      const route = page.getByTestId('stSelectbox').filter({hasText: '选择学习路线'}).getByRole('combobox');
-      await route.click();
-      await page.getByRole('option').filter({hasText: '电路基础入门'}).click();
-      await page.getByRole('button', {name: '进入教材学习', exact: true}).click();
+      await page.getByText('补充学习 · 平台原创课程', {exact: true}).click();
+      await page.getByRole('button', {name: '电路基础入门', exact: true}).click();
       await page.getByText('互动观察：欧姆定律与功率', {exact: true}).click();
       await page.getByRole('button', {name: '保存当前值作为对比起点', exact: true}).click();
       const voltage = page.getByRole('slider').first();

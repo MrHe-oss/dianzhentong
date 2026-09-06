@@ -96,8 +96,7 @@ def test_actual_numeric_quiz_ui_and_course_switching(tmp_path, monkeypatch, envi
     monkeypatch.setenv("DIANZHENTONG_ENV", environment)
     monkeypatch.setenv("DIANZHENTONG_DB_PATH", str(db))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    app.selectbox(key="home_book_selection").set_value(BOOK).run()
-    next(b for b in app.button if b.label == "进入教材学习").click().run()
+    app.button(key=f"supplement_{BOOK}").click().run()
     assert not app.exception
     assert any("先换单位" in e.label for e in app.expander)
     app.button(key="book_topic_dc_ohm_law").click().run()
