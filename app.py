@@ -62,6 +62,7 @@ from dianzhentong.curriculum_catalog import (
 )
 from dianzhentong.textbook_learning import calculate_unit_progress, lesson_for_topic
 from dianzhentong.circuit_ui import numeric_answer_input, render_resistor_explorer
+from dianzhentong.example_ui import render_example_reasoning
 from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
 from dianzhentong.plc_lab_ui import render_lab
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
@@ -106,7 +107,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.9"
+UI_STATE_VERSION = "4.10"
 STORAGE_CACHE_VERSION = "4.8-circuit-learning"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -2059,6 +2060,16 @@ elif stage == 20:
         )
     unit_minutes = sum((lesson_for_topic(topic["id"]) or {}).get("minutes", 2) for topic in topics)
     st.caption(f"本单元共 {len(topics)} 个知识点 · 预计学习 {unit_minutes} 分钟")
+    unit_example = example_for_unit(chapter_index, selected_book_id)
+    question_count = sum(question.chapter_id in mapped_chapter["quiz_chapter_ids"] for question in QUESTION_MAP.values())
+    formula_count = sum(len(formulas_for_topic(topic["id"])) for topic in topics)
+    st.caption(f"已提供：{len(topics)} 节讲解 · {formula_count} 项公式/逻辑关系 · 1 道原创例题 · {question_count} 道题库练习（不含即时检查与例题变式）")
+    if unit_example.get("learning_goals"):
+        st.write(f"**学习准备：** {unit_example['prerequisites']}")
+        for goal in unit_example["learning_goals"]:
+            st.write(f"- {goal}")
+    if not formula_count:
+        st.caption("本单元以概念和角色关系为主，无需计算公式。")
     first_unlearned = next((topic["id"] for topic in topics if topic["id"] not in learned_topic_ids), topics[0]["id"])
     if st.button("继续本单元学习" if learned_count else "开始本单元学习", type="primary", use_container_width=True):
         open_textbook_topic(selected_book_id, chapter_index, first_unlearned); st.rerun()
@@ -2074,10 +2085,7 @@ elif stage == 20:
                 open_textbook_topic(selected_book_id, chapter_index, topic["id"]); st.rerun()
     unit_example = example_for_unit(chapter_index, selected_book_id)
     with st.expander(f"🧩 {unit_example['title']}"):
-        st.write(f"**题目：** {unit_example['scenario']}")
-        for step_index, step in enumerate(unit_example["steps"], 1):
-            st.write(f"{step_index}. {step}")
-        st.success(f"**结论：** {unit_example['answer']}")
+        render_example_reasoning(unit_example, f"unit_reasoning_{selected_book_id}_{chapter_index}")
         st.markdown("#### 变式练习")
         overview_variant = st.radio(
             unit_example["practice"], unit_example["options"], index=None,
@@ -2255,10 +2263,7 @@ elif stage == 24:
                     render_resistor_explorer(f"circuit_lesson_{topic_id}")
             unit_example = example_for_unit(chapter_index, book_id)
             with st.expander("原创例题与分步解析"):
-                st.write(f"**题目：** {unit_example['scenario']}")
-                for step_index, step in enumerate(unit_example["steps"], 1):
-                    st.write(f"{step_index}. {step}")
-                st.success(f"**结论：** {unit_example['answer']}")
+                render_example_reasoning(unit_example, f"lesson_reasoning_{book_id}_{chapter_index}_{topic_id}")
                 st.markdown("#### 变式练习")
                 variant_key = f"textbook_variant_{book_id}_{chapter_index}_{topic_id}"
                 variant_answer = st.radio(unit_example["practice"], unit_example["options"], index=None, key=variant_key)
