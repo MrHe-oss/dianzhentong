@@ -169,6 +169,14 @@ QUESTIONS += tuple(QuizQuestion(**{key: value for key, value in row.items() if k
                    for row in question_specs())
 QUESTIONS += tuple(QuizQuestion(**{key: value for key, value in row.items() if key != "card"})
                    for row in circuit_question_specs())
+QUESTIONS += (QuizQuestion(
+    id="hw_cpu_transfer", chapter_id="p2_unit_1",
+    stem="教学系统已经读到两个布尔条件，需要判断它们是否同时成立。新增一个普通信号输入模块能否替代CPU完成用户程序中的这一判断？",
+    options=("不能，信号扩展与用户程序执行职责不同", "能，读到信号就等于执行了判断", "只增加通信模块就能替代CPU"),
+    answer="不能，信号扩展与用户程序执行职责不同",
+    explanation="读取状态是提供输入信息；按用户程序判断两个条件是否同时成立属于CPU的程序执行职责。扩展输入或通信能力不等于替代CPU。",
+    knowledge_point="程序执行与信号读取的区别",
+),)
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -211,6 +219,18 @@ QUESTION_CARD_MAP = {
 
 QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in question_specs()})
 QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in circuit_question_specs()})
+QUESTION_CARD_MAP["hw_cpu_transfer"] = "plc_cpu"
+
+OPTION_FEEDBACK = {
+    "hw_cpu_transfer": {
+        "能，读到信号就等于执行了判断": "混淆了读取与处理：读到两个状态不代表已经判断它们是否同时成立，逻辑判断仍由CPU执行用户程序完成。",
+        "只增加通信模块就能替代CPU": "混淆了通信与程序执行：交换状态是通信能力，不能代替CPU执行本题的用户程序。",
+    },
+    "q92": {"项目标题": "项目标题只是工程名称，不能增加硬件的输入输出能力。", "程序注释": "注释解释程序含义，不增加硬件信号接口；这里需要区分文档说明与信号扩展。"},
+    "q93": {"替代CPU执行全部程序": "信息交换与用户程序执行是不同职责，通信扩展不能据此代替CPU。", "直接完成真实接线": "通信模块描述硬件的信息交换能力，并不自动完成安装或接线。"},
+    "q94": {"外壳颜色": "外观不能证明硬件承担的职责，应依据任务需要的输入、处理、输出或通信功能分类。", "网页排列位置": "网页顺序是展示方式，不是硬件功能依据。"},
+    "q95": {"直接选择真实设备型号": "本节只提供功能分类，没有完整的兼容条件与任务参数，不能据此直接选型。", "指导现场带电操作": "题目中的抽象角色用于离线理解，不能转换为现场操作步骤。"},
+}
 
 
 def card_id_for_question(question_id: str) -> str:
@@ -230,6 +250,8 @@ def answer_feedback(question: QuizQuestion, selected_answer: str) -> str:
         return f"你的选择与本题考查的“{question.knowledge_point}”一致。"
     if selected_answer == "不确定":
         return f"本题已经给出足够的教学条件；对照“{question.knowledge_point}”后可以确定答案。"
+    if selected_answer in OPTION_FEEDBACK.get(question.id, {}):
+        return OPTION_FEEDBACK[question.id][selected_answer]
     if question.numeric_unit:
         return "先统一单位，再列式代入。请检查毫与千的换算，以及功率和能量的区别。"
     return (

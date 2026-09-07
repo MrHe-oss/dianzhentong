@@ -107,7 +107,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.10"
+UI_STATE_VERSION = "4.11"
 STORAGE_CACHE_VERSION = "4.8-circuit-learning"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -170,12 +170,16 @@ def open_knowledge(card_id: str | None = None) -> None:
         st.session_state.selected_knowledge_card = card_id
     set_stage(6)
 
-def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str) -> None:
+def open_textbook_topic(book_id: str, chapter_index: int, topic_id: str, return_stage: int | None = None) -> None:
     """打开教材语境下的知识页，避免跳入实验知识中心。"""
     st.session_state.textbook_context = {
         "book_id": book_id, "chapter_index": chapter_index, "topic_id": topic_id,
     }
     repository.record_textbook_visit(book_id, chapter_index, topic_id)
+    st.session_state.pop("textbook_quiz_return", None)
+    quiz = st.session_state.get("quiz_state", {})
+    if return_stage in (10, 11) and quiz.get("quiz_id"):
+        st.session_state.textbook_quiz_return = {"quiz_id": quiz["quiz_id"], "stage": return_stage, "topic_id": topic_id}
     set_stage(24)
 
 TEXTBOOK_SEARCH_INDEX = build_textbook_index(BOOK_EDITION_MAPPINGS)
@@ -271,6 +275,8 @@ def start_textbook_unit_assessment(book_id: str, chapter_index: int, pretest: bo
     """从同一单元知识范围抽题，沿用原有答题、错题和备份体系。"""
     unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
     pool = [question for chapter_id in unit["quiz_chapter_ids"] for question in questions_for_chapter(chapter_id)]
+    if "p2_unit_1" in unit["quiz_chapter_ids"]:
+        pool = [question for question in pool if question.id != unit["worked_example"].get("practice_question_id")]
     count = 3 if pretest else 5
     selected = secrets.SystemRandom().sample(pool, min(count, len(pool)))
     st.session_state.quiz_state = {
@@ -1334,6 +1340,7 @@ elif stage == 10:
                 st.rerun()
         else:
             answer = quiz["answers"][-1]
+            st.write(f"**你的首次判断：** {answer['selected_answer']}")
             if answer["is_correct"]:
                 st.success("回答正确。")
             else:
@@ -1342,6 +1349,10 @@ elif stage == 10:
             st.write(f"**针对你的答案：** {answer_feedback(question, answer['selected_answer'])}")
             st.caption(f"对应知识点：{question.knowledge_point}。仅限教学模拟，不用于真实设备操作。")
             render_provenance(provenance_for_question(card_id_for_question(question.id)), "本题参考资料")
+            if textbook_context:
+                card_id = card_id_for_question(question.id)
+                if st.button("回看本题知识点", key="quiz_relearn_topic", use_container_width=True):
+                    open_textbook_topic(textbook_context[0], textbook_context[1], card_id, return_stage=10); st.rerun()
             if st.button("查看成绩" if index == len(question_ids) - 1 else "下一题", type="primary", use_container_width=True):
                 if index == len(question_ids) - 1:
                     answers = tuple(QuizAnswer(**item) for item in quiz["answers"])
@@ -1413,11 +1424,11 @@ elif stage == 11:
                 action_columns = st.columns(2)
                 if action_columns[0].button("复习知识卡", key=f"quiz_card_{question.id}", use_container_width=True):
                     if unit_mode and card_id in mapped_chapter["topic_ids"]:
-                        open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], card_id)
+                        open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], card_id, return_stage=11)
                     else:
                         question_context = TEXTBOOK_QUIZ_CONTEXT.get(question.chapter_id)
                         if question_context:
-                            open_textbook_topic(question_context[0], question_context[1], card_id)
+                            open_textbook_topic(question_context[0], question_context[1], card_id, return_stage=11)
                         else:
                             question_chapter = chapter_by_id(question.chapter_id)
                             st.session_state.selected_experiment_id = question_chapter["experiment_id"] or DEFAULT_EXPERIMENT_ID
@@ -1429,7 +1440,7 @@ elif stage == 11:
         if wrong_answers and unit_mode:
             first_wrong_card = card_id_for_question(wrong_answers[0]["question_id"])
             if first_wrong_card in mapped_chapter["topic_ids"] and st.button("返回教材复习薄弱知识点", type="primary", use_container_width=True):
-                open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], first_wrong_card); st.rerun()
+                open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], first_wrong_card, return_stage=11); st.rerun()
         elif wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"], True); st.rerun()
         if st.session_state.get("review_origin"):
@@ -2175,6 +2186,15 @@ elif stage == 24:
             st.markdown('<div class="dzt-section-label">Textbook lesson</div>', unsafe_allow_html=True)
             st.caption(f"{book['title']}  ›  {mapped_chapter['title']}  ›  知识点 {topic_index + 1}/{len(topic_ids)}")
             st.subheader(card["title"])
+            return_anchor = st.session_state.get("textbook_quiz_return", {})
+            active_quiz = st.session_state.get("quiz_state", {})
+            if (return_anchor.get("quiz_id") and return_anchor.get("quiz_id") == active_quiz.get("quiz_id")
+                    and return_anchor.get("topic_id") == topic_id and return_anchor.get("stage") in (10, 11)):
+                if st.button("返回原练习" if return_anchor["stage"] == 10 else "返回原练习报告", key="return_to_quiz", type="primary", use_container_width=True):
+                    st.session_state.pop("textbook_quiz_return", None)
+                    set_stage(return_anchor["stage"]); st.rerun()
+            else:
+                st.session_state.pop("textbook_quiz_return", None)
             with st.expander("本单元学习目录"):
                 for directory_id in topic_ids:
                     if st.button(KNOWLEDGE_CARDS[directory_id]["title"], key=f"lesson_directory_{directory_id}",

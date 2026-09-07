@@ -18,7 +18,7 @@ def test_four_plc_units_have_five_traceable_questions_and_one_case():
         assert unit["quiz_chapter_ids"] == (chapter_id,)
         assert unit["case_ids"] == (case_id,)
         questions = questions_for_chapter(chapter_id)
-        assert len(questions) == 5
+        assert len(questions) == (6 if chapter_id == "p2_unit_1" else 5)
         assert all(card_id_for_question(item.id) in unit["topic_ids"] for item in questions)
         example_question = next(item for item in questions if item.id == unit["worked_example"]["practice_question_id"])
         assert example_question.stem == unit["worked_example"]["practice"]
@@ -57,8 +57,8 @@ def test_v44_ui_and_counts_are_updated():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
     readme = Path("README.md").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.10"' in config and 'UI_STATE_VERSION = "4.10"' in app
-    assert len(QUESTIONS) == 126 and len(DIAGRAM_CASES) == 22
+    assert 'APP_VERSION = "4.11"' in config and 'UI_STATE_VERSION = "4.11"' in app
+    assert len(QUESTIONS) == 127 and len(DIAGRAM_CASES) == 22
     for phrase in ("知识学习 · 40%", "例题练习 · 20%", "单元评测 · 40%"):
         assert phrase in app
     assert "116道题" in readme and "22个识图案例" in readme

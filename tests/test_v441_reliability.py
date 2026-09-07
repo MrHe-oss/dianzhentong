@@ -31,7 +31,8 @@ def save(repo, question_ids, correct_count, mode="original_review", sequence=0):
 @pytest.mark.parametrize("correct", [3, 4, 5])
 def test_plc_backup_restore_and_duplicate_import(tmp_path, kind, unit, correct):
     source = MemoryPracticeRepository()
-    ids = [q.id for q in questions_for_chapter(f"p2_unit_{unit}")]
+    # Preserve the original five-question archive fixture as the live pool grows.
+    ids = [q.id for q in questions_for_chapter(f"p2_unit_{unit}") if q.id.startswith("q")]
     record = save(source, ids, correct, "textbook_unit_assessment")
     assert record.passed == (correct >= 4)
     archive = parse_archive(archive_json_bytes(source))

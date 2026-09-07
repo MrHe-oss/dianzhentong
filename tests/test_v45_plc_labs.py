@@ -87,7 +87,7 @@ def test_gates_and_old_pools():
     s.observe()
     with pytest.raises(ValueError): s.finish_observation()
     for index in range(1, 5):
-        assert len(questions_for_chapter(f"p2_unit_{index}")) == 5
+        assert len([q for q in questions_for_chapter(f"p2_unit_{index}") if q.id.startswith("q")]) == 5
 
 
 def test_storage_failure_and_invalid_state(tmp_path, monkeypatch):
