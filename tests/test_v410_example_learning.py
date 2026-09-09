@@ -13,7 +13,7 @@ def test_example_requires_explicit_reveal_and_does_not_complete_learning(tmp_pat
     example = example_for_unit(3, BOOK)
     assert not app.exception
     assert not any(example["answer"] in message.value for message in app.success)
-    assert any("6 道题库练习" in message.value for message in app.caption)
+    assert any("题库总量 6 题" in message.value for message in app.caption)
     assert any("待完成" == m.value for m in app.metric if m.label == "例题练习 · 20%")
     app.checkbox(key=f"unit_reasoning_{BOOK}_3_hint").check().run()
     assert any(example["thinking_hint"] in message.value for message in app.info)

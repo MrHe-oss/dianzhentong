@@ -89,6 +89,7 @@ from dianzhentong.quiz import (
     card_id_for_question,
     make_quiz_record,
     questions_for_chapter,
+    textbook_question_pool,
     select_questions,
     similar_questions,
     is_correct_answer,
@@ -107,7 +108,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.11"
+UI_STATE_VERSION = "4.12"
 STORAGE_CACHE_VERSION = "4.8-circuit-learning"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -274,9 +275,7 @@ def start_chapter_quiz(chapter_id: str, review: bool = False) -> None:
 def start_textbook_unit_assessment(book_id: str, chapter_index: int, pretest: bool = False) -> None:
     """从同一单元知识范围抽题，沿用原有答题、错题和备份体系。"""
     unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
-    pool = [question for chapter_id in unit["quiz_chapter_ids"] for question in questions_for_chapter(chapter_id)]
-    if "p2_unit_1" in unit["quiz_chapter_ids"]:
-        pool = [question for question in pool if question.id != unit["worked_example"].get("practice_question_id")]
+    pool = textbook_question_pool(unit["quiz_chapter_ids"], unit["worked_example"].get("practice_question_id"))
     count = 3 if pretest else 5
     selected = secrets.SystemRandom().sample(pool, min(count, len(pool)))
     st.session_state.quiz_state = {
@@ -2074,7 +2073,8 @@ elif stage == 20:
     unit_example = example_for_unit(chapter_index, selected_book_id)
     question_count = sum(question.chapter_id in mapped_chapter["quiz_chapter_ids"] for question in QUESTION_MAP.values())
     formula_count = sum(len(formulas_for_topic(topic["id"])) for topic in topics)
-    st.caption(f"已提供：{len(topics)} 节讲解 · {formula_count} 项公式/逻辑关系 · 1 道原创例题 · {question_count} 道题库练习（不含即时检查与例题变式）")
+    independent_count = len(textbook_question_pool(mapped_chapter["quiz_chapter_ids"], unit_example.get("practice_question_id")))
+    st.caption(f"已提供：{len(topics)} 节讲解 · {formula_count} 项公式/逻辑关系 · 1 道原创例题 · 题库总量 {question_count} 题 · 可用于独立测验 {independent_count} 题")
     if unit_example.get("learning_goals"):
         st.write(f"**学习准备：** {unit_example['prerequisites']}")
         for goal in unit_example["learning_goals"]:

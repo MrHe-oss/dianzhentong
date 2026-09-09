@@ -33,6 +33,9 @@ for source_id, section, title, scope in (
                           "url": f"https://openstax.org/books/university-physics-volume-2/pages/{section}",
                           "type": "开放大学教材", "scope": scope, "checked_on": "2026-09-05"}
 
+SOURCES["siemens_scan"] = {"title": "Processing the scan cycle in RUN mode · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/plc-concepts/execution-of-the-user-program/processing-the-scan-cycle-in-run-mode", "type": "厂家系统手册", "scope": "过程映像与扫描处理；平台以读取为教学起点，不复现完整CPU时序", "checked_on": "2026-09-08"}
+SOURCES["siemens_bool"] = {"title": "Bool, Byte, Word and DWord data types · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/plc-concepts/data-types/bool-byte-word-and-dword-data-types", "type": "厂家数据类型说明", "scope": "布尔量表达真或假；平台变量情境为原创教学推理，未经过专业审核", "checked_on": "2026-09-08"}
+
 CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "control_power": _item("控制电源是接触器控制逻辑的前置条件。", ("abb_dol", "abb_contactor")),
     "fuse": _item("保护元件属于电动机启动控制组合的公共环节。", ("abb_dol", "abb_motor_control"), STATUS_VERIFIED),
@@ -58,9 +61,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "plc_system_role": _item("PLC系统可按输入、程序处理、输出和扩展能力理解。", ("siemens_s71200_manual",)),
     "plc_cpu": _item("CPU承担用户程序执行和系统协调等核心任务。", ("siemens_s71200_manual",)),
     "plc_modules": _item("信号模块和通信模块用于扩展不同类型的系统能力。", ("siemens_s71200_manual",)),
-    "plc_program_cycle": _item("CPU循环读取输入、执行用户程序并更新相关输出信息。", ("siemens_s71200_manual",)),
-    "plc_variables": _item("变量与数据类型共同描述程序数据的身份和规则。", ("siemens_s71200_manual",)),
-    "plc_logic_structure": _item("程序可通过组织块和逻辑网络进行结构化表达。", ("siemens_s71200_manual",)),
+    "plc_program_cycle": _item("本轮读取的信息—本轮计算—结果更新是教学模型，不是实际CPU完整时序；原创推理未经过专业审核。", ("siemens_scan",)),
+    "plc_variables": _item("变量含义与类型应匹配，布尔量表达真或假；原创情境未经过专业审核。", ("siemens_bool", "siemens_s71200_manual")),
+    "plc_logic_structure": _item("逻辑按目标拆分；本单元原创条件式限定停止优先且无保持，未经过专业审核。", ("siemens_s71200_manual",)),
     "tia_project": _item("TIA Portal项目用于组织设备和程序等工程对象。", ("siemens_s71200_manual",)),
     "tia_device_config": _item("设备组态描述CPU及扩展模块等工程硬件对象。", ("siemens_s71200_manual",)),
     "tia_program_blocks": _item("程序块承载逻辑，变量对象支持数据管理。", ("siemens_s71200_manual",)),
