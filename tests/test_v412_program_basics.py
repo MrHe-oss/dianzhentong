@@ -21,7 +21,7 @@ def test_independent_pools_and_old_answers():
             for n in (3, 5):
                 selected = random.Random(seed).sample(pool, n)
                 assert len({q.id for q in selected}) == n
-    assert "q101" in {q.id for q in textbook_question_pool(("p2_unit_3",), "q101")}
+    assert "q106" in {q.id for q in textbook_question_pool(("p2_unit_4",), "q106")}
     assert QUESTION_MAP["q100"].answer == "当前输入与状态影响下一轮结果"
     for q in textbook_question_pool(("p2_unit_2",), "q98"):
         assert set(OPTION_FEEDBACK[q.id]) == set(q.options) - {q.answer}

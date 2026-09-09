@@ -36,6 +36,8 @@ for source_id, section, title, scope in (
 SOURCES["siemens_scan"] = {"title": "Processing the scan cycle in RUN mode · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/plc-concepts/execution-of-the-user-program/processing-the-scan-cycle-in-run-mode", "type": "厂家系统手册", "scope": "过程映像与扫描处理；平台以读取为教学起点，不复现完整CPU时序", "checked_on": "2026-09-08"}
 SOURCES["siemens_bool"] = {"title": "Bool, Byte, Word and DWord data types · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/plc-concepts/data-types/bool-byte-word-and-dword-data-types", "type": "厂家数据类型说明", "scope": "布尔量表达真或假；平台变量情境为原创教学推理，未经过专业审核", "checked_on": "2026-09-08"}
 
+SOURCES["siemens_tia_tags"] = {"title": "Addressing PLC tags · STEP 7 V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/en-us/v20/programming-basics/using-and-addressing-operands/addressing-operands/addressing-plc-tags/addressing-plc-tags", "type": "厂家编程基础说明", "scope": "变量符号名与变量表定义的关联；平台不提供地址与真实操作步骤", "checked_on": "2026-09-09"}
+
 CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "control_power": _item("控制电源是接触器控制逻辑的前置条件。", ("abb_dol", "abb_contactor")),
     "fuse": _item("保护元件属于电动机启动控制组合的公共环节。", ("abb_dol", "abb_motor_control"), STATUS_VERIFIED),
@@ -64,9 +66,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "plc_program_cycle": _item("本轮读取的信息—本轮计算—结果更新是教学模型，不是实际CPU完整时序；原创推理未经过专业审核。", ("siemens_scan",)),
     "plc_variables": _item("变量含义与类型应匹配，布尔量表达真或假；原创情境未经过专业审核。", ("siemens_bool", "siemens_s71200_manual")),
     "plc_logic_structure": _item("逻辑按目标拆分；本单元原创条件式限定停止优先且无保持，未经过专业审核。", ("siemens_s71200_manual",)),
-    "tia_project": _item("TIA Portal项目用于组织设备和程序等工程对象。", ("siemens_s71200_manual",)),
-    "tia_device_config": _item("设备组态描述CPU及扩展模块等工程硬件对象。", ("siemens_s71200_manual",)),
-    "tia_program_blocks": _item("程序块承载逻辑，变量对象支持数据管理。", ("siemens_s71200_manual",)),
+    "tia_project": _item("TIA Portal项目组织设备和程序等对象；平台归类情境为原创，未经过专业审核。", ("siemens_s71200_manual",)),
+    "tia_device_config": _item("设备组态描述CPU及模块，不能替代条件逻辑；原创教学推理未经过专业审核。", ("siemens_s71200_manual",)),
+    "tia_program_blocks": _item("本例程序块承载逻辑、全局变量表管理定义，符号引用需要一致；不涵盖全部程序数据组织方式，原创情境未经过专业审核。", ("siemens_s71200_manual", "siemens_tia_tags")),
     "plc_project_flow": _item("PLC项目从任务分析进入工程组织、程序设计与验证。", ("siemens_s71200_manual",)),
     "plc_compile_check": _item("编译检查工程规则，但不能单独证明控制逻辑与安全要求正确。", ("siemens_s71200_manual",)),
     "plc_monitoring_boundary": _item("真实PLC调试必须遵循厂家资料和现场安全要求。", ("siemens_s71200_manual",)),

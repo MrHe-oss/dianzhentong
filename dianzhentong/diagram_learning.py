@@ -119,7 +119,7 @@ class DiagramTrainingSession:
     def answer(self, selected: str) -> bool:
         step = self.current_step
         if step is None: raise ValueError("识图训练已经完成")
-        if selected not in step["options"]: raise ValueError("答案不属于当前步骤选项")
+        if selected not in step["options"] and not (self.case_id == "plc_tia_objects" and selected == "不确定"): raise ValueError("答案不属于当前步骤选项")
         if step["id"] not in self.first_answers:
             self.first_answers[step["id"]] = selected
             if selected != step["answer"]: self.wrong_steps.append(step["id"])

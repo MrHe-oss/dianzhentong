@@ -182,6 +182,9 @@ QUESTIONS += (
     QuizQuestion("plc_variable_meaning", "p2_unit_2", "要分别保存允许条件是否成立和已完成任务的数量，哪种信息类型合适？", ("允许条件用布尔量，数量用数值量", "两者都用布尔量即可保留数量", "两者都只保存文字说明"), "允许条件用布尔量，数量用数值量", "布尔量表达真或假，数量需要区分0、1、2等数值；本题不涉及具体容量与型号选择。", "变量含义与信息类型"),
     QuizQuestion("plc_stop_priority", "p2_unit_2", "规定R=A且B且非T，A为允许、B为当前启动、T为停止，且没有自锁。三者都为真时R是什么？", ("假，停止条件阻止本次运行请求", "真，启动优先于停止", "沿用上次结果"), "假，停止条件阻止本次运行请求", "T为真使非T为假，所以整个与条件为假。该规则仅计算当前运行请求，未引入上次状态，也不会自动保持。", "停止优先与无保持条件"),
 )
+from .tia_basics import QUESTION_SPECS as TIA_QUESTIONS, OPTION_FEEDBACK as TIA_FEEDBACK
+
+QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k != "card"}) for row in TIA_QUESTIONS)
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -246,6 +249,10 @@ OPTION_FEEDBACK = {
 }
 
 
+QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in TIA_QUESTIONS})
+OPTION_FEEDBACK.update(TIA_FEEDBACK)
+
+
 def card_id_for_question(question_id: str) -> str:
     return QUESTION_CARD_MAP[question_id]
 
@@ -291,7 +298,7 @@ def questions_for_chapter(chapter_id: str) -> tuple[QuizQuestion, ...]:
 def textbook_question_pool(chapter_ids: Sequence[str], example_question_id: str | None = None) -> tuple[QuizQuestion, ...]:
     """仅已建设独立题库的单元排除例题；其余单元保留旧行为。"""
     return tuple(q for q in QUESTIONS if q.chapter_id in chapter_ids
-                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2"}
+                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2", "p2_unit_3"}
                           and q.id == example_question_id))
 
 
