@@ -38,6 +38,8 @@ SOURCES["siemens_bool"] = {"title": "Bool, Byte, Word and DWord data types · V2
 
 SOURCES["siemens_tia_tags"] = {"title": "Addressing PLC tags · STEP 7 V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/en-us/v20/programming-basics/using-and-addressing-operands/addressing-operands/addressing-plc-tags/addressing-plc-tags", "type": "厂家编程基础说明", "scope": "变量符号名与变量表定义的关联；平台不提供地址与真实操作步骤", "checked_on": "2026-09-09"}
 
+SOURCES["siemens_compile"] = {"title": "Correcting compilation errors · STEP 7 V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/en-us/v20/compiling-and-downloading-plc-programs/compiling-blocks/correcting-compilation-errors", "type": "厂家编程说明", "scope": "编译结果与错误信息；平台逻辑反例为原创推理，不执行真实编译", "checked_on": "2026-09-09"}
+
 CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "control_power": _item("控制电源是接触器控制逻辑的前置条件。", ("abb_dol", "abb_contactor")),
     "fuse": _item("保护元件属于电动机启动控制组合的公共环节。", ("abb_dol", "abb_motor_control"), STATUS_VERIFIED),
@@ -69,9 +71,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
     "tia_project": _item("TIA Portal项目组织设备和程序等对象；平台归类情境为原创，未经过专业审核。", ("siemens_s71200_manual",)),
     "tia_device_config": _item("设备组态描述CPU及模块，不能替代条件逻辑；原创教学推理未经过专业审核。", ("siemens_s71200_manual",)),
     "tia_program_blocks": _item("本例程序块承载逻辑、全局变量表管理定义，符号引用需要一致；不涵盖全部程序数据组织方式，原创情境未经过专业审核。", ("siemens_s71200_manual", "siemens_tia_tags")),
-    "plc_project_flow": _item("PLC项目从任务分析进入工程组织、程序设计与验证。", ("siemens_s71200_manual",)),
-    "plc_compile_check": _item("编译检查工程规则，但不能单独证明控制逻辑与安全要求正确。", ("siemens_s71200_manual",)),
-    "plc_monitoring_boundary": _item("真实PLC调试必须遵循厂家资料和现场安全要求。", ("siemens_s71200_manual",)),
+    "plc_project_flow": _item("PLC学习项目按需求、变量、逻辑、检查与验证组织；原创教学推理未经过专业审核。", ("siemens_s71200_manual",)),
+    "plc_compile_check": _item("编译信息与需求验证分开理解；平台反例为原创推理，未经过专业审核。", ("siemens_compile", "siemens_s71200_manual")),
+    "plc_monitoring_boundary": _item("模拟证据只覆盖给定模型与条件，不等于真实系统验证；原创教学推理未经过专业审核。", ("siemens_s71200_manual",)),
 }
 
 CARD_PROVENANCE.update({

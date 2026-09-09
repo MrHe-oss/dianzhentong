@@ -183,8 +183,10 @@ QUESTIONS += (
     QuizQuestion("plc_stop_priority", "p2_unit_2", "规定R=A且B且非T，A为允许、B为当前启动、T为停止，且没有自锁。三者都为真时R是什么？", ("假，停止条件阻止本次运行请求", "真，启动优先于停止", "沿用上次结果"), "假，停止条件阻止本次运行请求", "T为真使非T为假，所以整个与条件为假。该规则仅计算当前运行请求，未引入上次状态，也不会自动保持。", "停止优先与无保持条件"),
 )
 from .tia_basics import QUESTION_SPECS as TIA_QUESTIONS, OPTION_FEEDBACK as TIA_FEEDBACK
+from .project_basics import QUESTION_SPECS as PROJECT_QUESTIONS, OPTION_FEEDBACK as PROJECT_FEEDBACK
 
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k != "card"}) for row in TIA_QUESTIONS)
+QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k != "card"}) for row in PROJECT_QUESTIONS)
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -251,6 +253,8 @@ OPTION_FEEDBACK = {
 
 QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in TIA_QUESTIONS})
 OPTION_FEEDBACK.update(TIA_FEEDBACK)
+QUESTION_CARD_MAP.update({row["id"]: row["card"] for row in PROJECT_QUESTIONS})
+OPTION_FEEDBACK.update(PROJECT_FEEDBACK)
 
 
 def card_id_for_question(question_id: str) -> str:
@@ -298,7 +302,7 @@ def questions_for_chapter(chapter_id: str) -> tuple[QuizQuestion, ...]:
 def textbook_question_pool(chapter_ids: Sequence[str], example_question_id: str | None = None) -> tuple[QuizQuestion, ...]:
     """仅已建设独立题库的单元排除例题；其余单元保留旧行为。"""
     return tuple(q for q in QUESTIONS if q.chapter_id in chapter_ids
-                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2", "p2_unit_3"}
+                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2", "p2_unit_3", "p2_unit_4"}
                           and q.id == example_question_id))
 
 

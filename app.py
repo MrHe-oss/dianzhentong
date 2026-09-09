@@ -65,6 +65,9 @@ from dianzhentong.circuit_ui import numeric_answer_input, render_resistor_explor
 from dianzhentong.example_ui import render_example_reasoning
 from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
 from dianzhentong.tia_basics import DIAGRAM_FEEDBACK as TIA_DIAGRAM_FEEDBACK, OBJECT_ROLES as TIA_OBJECT_ROLES
+from dianzhentong.project_basics import DIAGRAM_FEEDBACK as PROJECT_DIAGRAM_FEEDBACK
+
+TEXTBOOK_DIAGRAM_FEEDBACK = {**TIA_DIAGRAM_FEEDBACK, **PROJECT_DIAGRAM_FEEDBACK}
 from dianzhentong.plc_lab_ui import render_lab
 from dianzhentong.textbook_examples import example_for_unit, formulas_for_topic
 from dianzhentong.textbook_visuals import SELF_HOLD_STATES, visual_for_topic
@@ -109,7 +112,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.13"
+UI_STATE_VERSION = "4.14"
 STORAGE_CACHE_VERSION = "4.8-circuit-learning"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -1547,8 +1550,9 @@ elif stage == 13:
         st.subheader(f"🧩 {case['title']}")
         st.error(f"**模拟现象：** {case['phenomenon']}")
         st.warning(SAFETY_NOTICE)
+        highlight_index = (0, 2, 3)[training.index] if training.case_id == "plc_project_check" and not training.is_complete else training.index
         flow_html = "<b>→</b>".join(
-            f"<span style='font-weight:{'700' if index == training.index else '400'}'>{node}</span>"
+            f"<span style='font-weight:{'700' if index == highlight_index and not training.is_complete else '400'}'>{node}</span>"
             for index, node in enumerate(case["nodes"])
         )
         if training.case_id == "plc_tia_objects":
@@ -1565,17 +1569,17 @@ elif stage == 13:
             st.progress(training.index / len(case["steps"]), text=f"路径步骤 {training.index + 1} / {len(case['steps'])}")
             st.markdown(f"### {step['prompt']}")
             first_selected = training.first_answers.get(step["id"])
-            if training.case_id == "plc_tia_objects" and first_selected is not None:
+            if training.case_id in {"plc_tia_objects", "plc_project_check"} and first_selected is not None:
                 st.caption(f"你的首次判断：{first_selected}（后续更正不改变首次得分）")
                 if first_selected != step["answer"]:
-                    st.warning(TIA_DIAGRAM_FEEDBACK[step["id"]].get(first_selected, f"先辨认对象的职责：{step['explanation']}"))
+                    st.warning(TEXTBOOK_DIAGRAM_FEEDBACK[step["id"]].get(first_selected, f"先辨认对象的职责：{step['explanation']}"))
             if first_selected is not None and first_selected != step["answer"] and case["chapter_id"].startswith("star_delta_"):
                 feedback = diagram_choice_feedback(training.case_id, training.index, first_selected)
                 st.markdown(f"<div class='dzt-stage'><strong>当前阶段：{feedback['stage']}</strong>"
                             f"<p><strong>应判断：</strong>{feedback['role']}</p>"
                             f"<p><strong>为什么：</strong>{feedback['reason']}</p>"
                             f"<p><strong>推荐复习：</strong>{feedback['card_title']}</p></div>", unsafe_allow_html=True)
-            choices = (*step["options"], "不确定") if training.case_id == "plc_tia_objects" else step["options"]
+            choices = (*step["options"], "不确定") if training.case_id in {"plc_tia_objects", "plc_project_check"} else step["options"]
             selected = st.radio("选择下一判断", choices, index=None,
                                 key=f"diagram_choice_{training.training_id}_{step['id']}_{len(training.first_answers)}")
             if st.button("提交本步判断", type="primary", disabled=selected is None, use_container_width=True):
@@ -1599,9 +1603,9 @@ elif stage == 13:
                 for step_id in training.wrong_steps:
                     step = next(item for item in case["steps"] if item["id"] == step_id)
                     st.write(f"- {step['prompt']}：{step['explanation']}")
-                    if training.case_id == "plc_tia_objects":
+                    if training.case_id in {"plc_tia_objects", "plc_project_check"}:
                         first = training.first_answers[step_id]
-                        st.write(f"首次判断：{first}。" + TIA_DIAGRAM_FEEDBACK[step_id].get(first, "不确定时先按对象职责逐项排除。"))
+                        st.write(f"首次判断：{first}。" + TEXTBOOK_DIAGRAM_FEEDBACK[step_id].get(first, "不确定时先按题设条件逐项排除。"))
             else:
                 st.success("全部步骤首次判断正确。")
             st.markdown("### 推荐路径")
@@ -1617,7 +1621,7 @@ elif stage == 13:
             next_case = next((item for item in chapter_cases if item["id"] != training.case_id), chapter_cases[0])
             if st.button("再练一个案例", type="primary", use_container_width=True):
                 start_diagram_training(next_case["id"]); st.rerun()
-            if st.button("返回本教材单元" if training.case_id == "plc_tia_objects" else "返回本章", use_container_width=True):
+            if st.button("返回本教材单元" if training.case_id in {"plc_tia_objects", "plc_project_check"} else "返回本章", use_container_width=True):
                 context = TEXTBOOK_QUIZ_CONTEXT.get(case["chapter_id"])
                 st.session_state.pop("diagram_training", None); st.session_state.pop("review_origin", None)
                 if context:
@@ -2147,6 +2151,8 @@ elif stage == 20:
             start_diagram_training("plc_tia_objects"); st.rerun()
 
     st.markdown("### 本单元练习与实训")
+    if "plc_project_check" in mapped_chapter["case_ids"]:
+        st.caption("项目检查练习：先明确需求，再区分工程检查与模拟验证。上方保持演示含记忆；本单元原创例题不含记忆。")
     action_columns = st.columns(3)
     action_columns[0].markdown("**单元评测**")
     if not mapped_chapter["quiz_chapter_ids"]:
