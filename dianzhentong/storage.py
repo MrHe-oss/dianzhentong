@@ -581,6 +581,11 @@ class PracticeRepository:
             ).fetchall()
         return [{**dict(row), "passed": bool(row["passed"])} for row in rows]
 
+    def quiz_answers(self, quiz_id: str) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT question_id, selected_answer, correct_answer, is_correct, uncertain FROM quiz_answers WHERE quiz_id = ? ORDER BY rowid", (quiz_id,)).fetchall()
+        return [{**dict(row), "is_correct": bool(row["is_correct"]), "uncertain": bool(row["uncertain"])} for row in rows]
+
     def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
         with self.connect() as connection:
             rows = connection.execute(
@@ -923,6 +928,10 @@ class MemoryPracticeRepository:
                  "total_count": item.total_count, "passed": item.passed, "mode": item.mode}
                 for item in records[:max(1, min(int(limit), 100))]]
 
+    def quiz_answers(self, quiz_id: str) -> list[dict[str, Any]]:
+        record = self.quiz_records.get(quiz_id)
+        return [asdict(answer) for answer in record.answers] if record else []
+
     def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
         counts: dict[str, int] = {}
         for record in self.quiz_records.values():
@@ -1129,6 +1138,9 @@ class ResilientPracticeRepository:
 
     def quiz_history(self, chapter_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         return self._call("quiz_history", chapter_id, limit)
+
+    def quiz_answers(self, quiz_id: str) -> list[dict[str, Any]]:
+        return self._call("quiz_answers", quiz_id)
 
     def wrong_question_ids(self, chapter_id: str | None = None) -> list[str]:
         return self._call("wrong_question_ids", chapter_id)

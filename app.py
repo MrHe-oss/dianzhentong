@@ -61,6 +61,7 @@ from dianzhentong.curriculum_catalog import (
     topics_for_book_chapter,
 )
 from dianzhentong.textbook_learning import calculate_unit_progress, lesson_for_topic
+from dianzhentong import textbook_project
 from dianzhentong.circuit_ui import numeric_answer_input, render_resistor_explorer
 from dianzhentong.example_ui import render_example_reasoning
 from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
@@ -102,7 +103,8 @@ import dianzhentong.storage as storage_module
 
 # Streamlit Cloud 可能在热更新后保留旧模块与缓存对象；升级存储接口时主动刷新。
 if (not hasattr(storage_module.ResilientPracticeRepository, "capstone_summary")
-        or not hasattr(storage_module.ResilientPracticeRepository, "study_notes")):
+        or not hasattr(storage_module.ResilientPracticeRepository, "study_notes")
+        or not hasattr(storage_module.ResilientPracticeRepository, "quiz_answers")):
     storage_module = importlib.reload(storage_module)
 
 ResilientPracticeRepository = storage_module.ResilientPracticeRepository
@@ -112,8 +114,8 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.14"
-STORAGE_CACHE_VERSION = "4.8-circuit-learning"
+UI_STATE_VERSION = "4.15"
+STORAGE_CACHE_VERSION = "4.15-project-review"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
 <style>
@@ -291,6 +293,16 @@ def start_textbook_unit_assessment(book_id: str, chapter_index: int, pretest: bo
     }
     set_stage(10)
 
+def start_project_assessment():
+    st.session_state.pop("textbook_quiz_return", None)
+    st.session_state.quiz_state = {
+        "chapter_id": textbook_project.SCOPE, "mode": textbook_project.MODE,
+        "quiz_id": secrets.token_hex(12), "question_ids": [q.id for q in textbook_project.select_project_questions()],
+        "index": 0, "answers": [], "answered": False,
+    }
+    set_stage(10)
+
+
 def textbook_unit_effect(book_id: str, chapter_index: int) -> dict[str, object]:
     """基于既有测验记录计算最近一次学前、学后成绩。"""
     unit = BOOK_EDITION_MAPPINGS[book_id]["chapters"][chapter_index]
@@ -445,7 +457,7 @@ def render_experiment_selector() -> None:
 if "stage" not in st.session_state:
     st.session_state.stage = 1
 stage = st.session_state.stage
-if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}:
+if stage not in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}:
     stage = 1
     st.session_state.stage = 1
     st.session_state.pop("diagnostic_state", None)
@@ -1298,14 +1310,19 @@ elif stage == 9:
 
 elif stage == 10:
     quiz = st.session_state.get("quiz_state")
-    valid_quiz_chapters = {item["id"] for item in ALL_CHAPTERS} | set(TEXTBOOK_QUIZ_CONTEXT)
-    if not quiz or quiz.get("chapter_id") not in valid_quiz_chapters:
+    project_mode = bool(quiz and quiz.get("mode") == textbook_project.MODE)
+    valid_quiz_chapters = {item["id"] for item in ALL_CHAPTERS} | set(TEXTBOOK_QUIZ_CONTEXT) | {textbook_project.SCOPE}
+    project_invalid = bool(quiz and (project_mode != (quiz.get("chapter_id") == textbook_project.SCOPE)
+                           or (project_mode and not textbook_project.valid_project_questions(quiz.get("question_ids", [])))))
+    if not quiz or quiz.get("chapter_id") not in valid_quiz_chapters or project_invalid:
         st.warning("测验状态已失效，请重新开始。")
         if st.button("返回课程地图", use_container_width=True):
             set_stage(1); st.rerun()
     else:
         textbook_context = TEXTBOOK_QUIZ_CONTEXT.get(quiz["chapter_id"])
-        if textbook_context:
+        if project_mode:
+            quiz_title = "项目2综合测验"
+        elif textbook_context:
             textbook_book = BOOK_EDITION_MAPPINGS[textbook_context[0]]
             quiz_title = textbook_book["chapters"][textbook_context[1]]["title"]
         else:
@@ -1313,6 +1330,9 @@ elif stage == 10:
         question_ids = quiz["question_ids"]
         index = min(int(quiz["index"]), len(question_ids) - 1)
         question = QUESTION_MAP[question_ids[index]]
+        if project_mode:
+            textbook_context = TEXTBOOK_QUIZ_CONTEXT.get(question.chapter_id)
+            st.caption(f"当前单元：{BOOK_EDITION_MAPPINGS[textbook_context[0]]['chapters'][textbook_context[1]]['title']} · 共8题，至少答对6题通过")
         quiz_label = {"original_review": "复习原错题", "similar_review": "相似题巩固", "wrong_review": "错题复习"}.get(quiz["mode"], "单元测验")
         st.subheader(f"📝 {quiz_title} · {quiz_label}")
         st.progress((index + 1) / len(question_ids), text=f"第 {index + 1} / {len(question_ids)} 题")
@@ -1375,7 +1395,7 @@ elif stage == 10:
             st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None)
             if textbook_context:
                 st.session_state.selected_textbook_id, st.session_state.selected_textbook_chapter = textbook_context
-            set_stage(20 if textbook_context else 8); st.rerun()
+            set_stage(27 if project_mode else (20 if textbook_context else 8)); st.rerun()
 
 elif stage == 11:
     quiz = st.session_state.get("quiz_state", {})
@@ -1387,16 +1407,17 @@ elif stage == 11:
         unit_pretest = quiz.get("mode") == "textbook_unit_pretest"
         unit_assessment = quiz.get("mode") == "textbook_unit_assessment"
         unit_mode = unit_pretest or unit_assessment
+        project_mode = quiz.get("mode") == textbook_project.MODE
         textbook_context = TEXTBOOK_QUIZ_CONTEXT.get(quiz["chapter_id"])
         if textbook_context and "book_id" not in quiz:
             quiz["book_id"], quiz["book_chapter_index"] = textbook_context
-        chapter = None if textbook_context else chapter_by_id(quiz["chapter_id"])
-        st.subheader("📋 学前小测报告" if unit_pretest else ("📋 单元评测报告" if unit_assessment else "📋 章节测验报告"))
+        chapter = None if textbook_context or project_mode else chapter_by_id(quiz["chapter_id"])
+        st.subheader("📋 项目2综合学习报告" if project_mode else ("📋 学前小测报告" if unit_pretest else ("📋 单元评测报告" if unit_assessment else "📋 章节测验报告")))
         if unit_mode:
             book = BOOK_EDITION_MAPPINGS[quiz["book_id"]]
             mapped_chapter = book["chapters"][quiz["book_chapter_index"]]
             st.markdown(f"### {mapped_chapter['title']}")
-        else:
+        elif not project_mode:
             st.markdown(f"### {chapter['title'] if chapter else BOOK_EDITION_MAPPINGS[quiz['book_id']]['chapters'][quiz['book_chapter_index']]['title']}")
         st.metric("本次成绩", f"{result['correct_count']} / {result['total_count']}（{score:.0%}）")
         if unit_assessment:
@@ -1404,7 +1425,17 @@ elif stage == 11:
             if effect["before"] is not None:
                 st.metric("学习效果", f"{effect['before']:.0%} → {score:.0%}",
                           delta=f"{score - effect['before']:+.0%}")
-        if unit_pretest:
+        if project_mode:
+            st.info("每单元仅抽取2题，只反映本次作答，不代表整个单元掌握程度。综合测验不改变原有单元成绩。")
+            if result["passed"]:
+                st.success("本次已通过：8题中至少6题正确。")
+            else:
+                st.warning("尚未达到6 / 8，建议按下方错题回学后再试。")
+            for row in textbook_project.unit_results(quiz["answers"]):
+                st.write(f"**{row['title']}：{row['correct']} / {row['total']}**")
+            st.download_button("下载项目学习报告", textbook_project.report_text(quiz["answers"]),
+                               file_name="项目2综合学习报告.txt", mime="text/plain", use_container_width=True)
+        elif unit_pretest:
             st.info("这是学习起点记录，不计入单元掌握成绩。完成小课后再参加学后评测。")
         elif result["passed"]:
             st.success("已达到70%通过标准，单元评测完成。" if unit_assessment else "已达到60%通过标准，本章测验完成。")
@@ -1444,7 +1475,7 @@ elif stage == 11:
             first_wrong_card = card_id_for_question(wrong_answers[0]["question_id"])
             if first_wrong_card in mapped_chapter["topic_ids"] and st.button("返回教材复习薄弱知识点", type="primary", use_container_width=True):
                 open_textbook_topic(quiz["book_id"], quiz["book_chapter_index"], first_wrong_card, return_stage=11); st.rerun()
-        elif wrong_answers and st.button("立即复习本章错题", type="primary", use_container_width=True):
+        elif wrong_answers and not project_mode and st.button("立即复习本章错题", type="primary", use_container_width=True):
             start_chapter_quiz(quiz["chapter_id"], True); st.rerun()
         if st.session_state.get("review_origin"):
             if st.button("返回复习清单", type="primary", use_container_width=True):
@@ -1457,16 +1488,20 @@ elif stage == 11:
                 st.session_state.pop("quiz_state", None)
                 set_stage(20); st.rerun()
         if st.button("再测一次", use_container_width=True):
-            if quiz.get("mode") in {"original_review", "similar_review"}:
+            if project_mode:
+                start_project_assessment()
+            elif quiz.get("mode") in {"original_review", "similar_review"}:
                 start_question_review(quiz.get("review_question_id", quiz["question_ids"][0]), similar=quiz["mode"] == "similar_review")
             elif unit_mode:
                 start_textbook_unit_assessment(quiz["book_id"], quiz["book_chapter_index"], pretest=unit_pretest)
             else:
                 start_chapter_quiz(quiz["chapter_id"])
             st.rerun()
-        if st.button("返回教材单元" if unit_mode else "返回本章", use_container_width=True):
+        if st.button("返回项目2学习概览" if project_mode else ("返回教材单元" if unit_mode else "返回本章"), use_container_width=True):
             st.session_state.pop("quiz_state", None); st.session_state.pop("review_origin", None)
-            if unit_mode:
+            if project_mode:
+                set_stage(27)
+            elif unit_mode:
                 st.session_state.selected_textbook_id = quiz["book_id"]
                 st.session_state.selected_textbook_chapter = quiz["book_chapter_index"]
                 set_stage(20)
@@ -2064,6 +2099,9 @@ elif stage == 20:
         key="selected_textbook_chapter",
     )
     mapped_chapter = book["chapters"][chapter_index]
+    if selected_book_id == textbook_project.BOOK_ID and mapped_chapter["project_id"] == "project_2":
+        if st.button("项目2学习概览与综合复习", key="project2_overview", use_container_width=True):
+            set_stage(27); st.rerun()
     st.caption(f"{book['title']} › {mapped_chapter['title']}")
     st.write("学习顺序：知识点与公式 → 原创例题 → 单元习题与解析。配套实训用于巩固本单元。")
     current_unit_state = textbook_unit_state(selected_book_id, chapter_index)
@@ -2189,6 +2227,47 @@ elif stage == 20:
                                else "本单元使用识图和课程综合实训，暂不提供独立故障模拟。")
     st.warning(book["notice"] + " 平台内容为原创讲解与训练，不替代纸质或正版电子教材。")
     if st.button("返回学习首页", use_container_width=True): set_stage(1); st.rerun()
+
+elif stage == 27:
+    st.subheader("📚 项目2学习概览")
+    st.caption("认识PLC、程序设计、TIA工程对象与项目流程 · 综合复习为教材辅助环节")
+    states = {index: textbook_unit_state(textbook_project.BOOK_ID, index) for index, _ in textbook_project.UNITS}
+    history = repository.quiz_history(textbook_project.SCOPE, 100)
+    latest_answers = repository.quiz_answers(history[0]["quiz_id"]) if history else []
+    recommended = textbook_project.recommended_unit(states, latest_answers)
+    st.info("继续学习建议：" + BOOK_EDITION_MAPPINGS[textbook_project.BOOK_ID]["chapters"][recommended]["title"])
+    st.caption("最近综合测验有错题时优先回学对应单元；否则继续第一个未完成单元。全部完成后可自由复习。")
+    if st.button("继续推荐单元", type="primary", use_container_width=True):
+        st.session_state.selected_textbook_id = textbook_project.BOOK_ID
+        st.session_state.selected_textbook_chapter = recommended
+        set_stage(20); st.rerun()
+    for index, unit in textbook_project.UNITS:
+        with st.container(border=True):
+            state = states[index]
+            st.markdown(f"### {unit['title']}")
+            st.progress(state.completion, text=f"{state.status} · {state.completion:.0%}")
+            st.caption(f"知识学习 {state.knowledge_completion:.0%} · 例题{'已完成' if state.example_completed else '待完成'} · 单元评测{'已通过' if state.assessment_passed else '待通过'}")
+            if st.button("学习 / 复习这个单元", key=f"project_unit_{index}", use_container_width=True):
+                st.session_state.selected_textbook_id = textbook_project.BOOK_ID
+                st.session_state.selected_textbook_chapter = index
+                set_stage(20); st.rerun()
+    st.markdown("### 项目2综合测验")
+    st.write("四个单元各抽2道独立题，共8题；至少答对6题通过。不包含例题变式，不改变单元成绩。")
+    if history:
+        st.write(f"最近一次：{history[0]['correct_count']} / {history[0]['total_count']}")
+        if textbook_project.valid_project_questions([a["question_id"] for a in latest_answers]):
+            if st.button("查看最近综合报告", use_container_width=True):
+                latest = history[0]
+                st.session_state.quiz_state = {
+                    "chapter_id": textbook_project.SCOPE, "mode": textbook_project.MODE,
+                    "quiz_id": latest["quiz_id"], "question_ids": [a["question_id"] for a in latest_answers],
+                    "index": 7, "answers": latest_answers, "answered": True, "record": latest,
+                }
+                set_stage(11); st.rerun()
+    else:
+        st.caption("尚无综合测验记录。建议先学习四个单元，再检查理解。")
+    if st.button("开始项目2综合测验", type="primary", use_container_width=True):
+        start_project_assessment(); st.rerun()
 
 elif stage == 24:
     context = st.session_state.get("textbook_context", {})

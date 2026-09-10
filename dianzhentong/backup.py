@@ -17,6 +17,7 @@ from .storage import CapstoneTaskRecord, DiagramPracticeRecord, LearningActivity
 from .diagram_learning import DIAGRAM_CASES
 from .capstone import CAPSTONE_TASKS
 from .curriculum_catalog import BOOK_EDITION_MAPPINGS
+from .textbook_project import SCOPE as PROJECT_SCOPE, MODE as PROJECT_MODE, CHAPTER_IDS as PROJECT_CHAPTERS, valid_project_questions
 
 
 ARCHIVE_FORMAT = "dianzhentong-learning-archive"
@@ -172,7 +173,10 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         if not isinstance(item, dict) or set(item) != required:
             raise BackupValidationError("测验记录字段不完整")
         record_scope = item["chapter_id"]
-        if record_scope not in chapters | set(course_chapter_ids):
+        project_mode = item["mode"] == PROJECT_MODE
+        if project_mode != (record_scope == PROJECT_SCOPE):
+            raise BackupValidationError("项目综合测验范围无效")
+        if record_scope not in chapters | set(course_chapter_ids) | {PROJECT_SCOPE}:
             raise BackupValidationError("测验包含未知章节")
         if item["mode"] == "course_exam" and record_scope not in course_chapter_ids:
             raise BackupValidationError("课程综合评测范围无效")
@@ -184,6 +188,8 @@ def validate_archive(archive: Any) -> dict[str, Any]:
         answers = item["answers"]
         if not isinstance(answers, list) or len(answers) != total or correct > total:
             raise BackupValidationError("测验答案数量不一致")
+        if project_mode and not valid_project_questions([a.get("question_id") for a in answers if isinstance(a, dict)]):
+            raise BackupValidationError("项目综合测验必须包含四个单元各2道独立题")
         seen: set[str] = set()
         actual_correct = 0
         for answer in answers:
@@ -195,6 +201,8 @@ def validate_archive(archive: Any) -> dict[str, Any]:
                                        else {record_scope})
             if item["mode"] in {"textbook_unit_pretest", "textbook_unit_assessment"}:
                 valid_question_chapters = textbook_scopes.get(record_scope, {record_scope})
+            if project_mode:
+                valid_question_chapters = PROJECT_CHAPTERS
             if question_id in seen or question_id not in QUESTION_MAP or QUESTION_MAP[question_id].chapter_id not in valid_question_chapters:
                 raise BackupValidationError("测验题目无效或重复")
             seen.add(question_id)
@@ -215,7 +223,7 @@ def validate_archive(archive: Any) -> dict[str, Any]:
             if answer["uncertain"] != (answer["selected_answer"] == "不确定"):
                 raise BackupValidationError("不确定状态与答案不一致")
             actual_correct += int(is_correct)
-        threshold = 0.7 if item["mode"] in {"course_exam", "textbook_unit_assessment"} else 0.6
+        threshold = 0.75 if project_mode else (0.7 if item["mode"] in {"course_exam", "textbook_unit_assessment"} else 0.6)
         if actual_correct != correct or passed != bool(total and correct / total >= threshold):
             raise BackupValidationError("测验得分与答案不一致")
 

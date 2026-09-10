@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-APP_VERSION = "4.14"
+APP_VERSION = "4.15"
 LOCAL_ENV = "local"
 CLOUD_ENV = "community_cloud"
 
