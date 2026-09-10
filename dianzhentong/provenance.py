@@ -21,6 +21,9 @@ SOURCES: dict[str, dict[str, str]] = {
     "siemens_s71200_manual": {"title":"S7-1200 Programmable Controller System Manual V4.7","publisher":"Siemens","url":"https://support.industry.siemens.com/cs/attachments/109977302/s71200_system_manual_en-US.pdf","type":"厂家系统手册","scope":"CPU、信号与通信模块、程序执行、设备组态和编程基础","checked_on":CHECKED_ON},
 }
 
+SOURCES["siemens_bit_logic"] = {"title": "S7-1200 Bit logic instructions · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_zhcn_20/basic-instructions/bit-logic-operations/bit-logic-instructions", "type": "厂家编程说明", "scope": "逻辑触点、布尔运算与普通输出赋值；原创组合情境仍待专业复核", "checked_on": "2026-09-10"}
+
+
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
     return {"principle": principle, "sources": sources, "status": status}
 
@@ -77,6 +80,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
 }
 
 CARD_PROVENANCE.update({
+    "bit_contacts": _item("程序逻辑触点检查所关联位的真假，不等同于真实按钮状态；原创情境未经专业审核。", ("siemens_bit_logic",)),
+    "bit_combinations": _item("与、或、非合成布尔条件；平台组合式及反例为原创推理，未经专业审核。", ("siemens_bit_logic",)),
+    "bit_assignment": _item("普通赋值按当前逻辑结果写入；本例限定每次执行、单一写入且无记忆，未经专业审核。", ("siemens_bit_logic",)),
     "dc_current_units": _item("平均电流为净电荷量与时间间隔之比；电流采用正电荷运动方向。", ("openstax_current",)),
     "dc_ohm_law": _item("理想线性电阻在关联参考方向下U=RI。", ("openstax_ohm",)),
     "dc_resistor_power": _item("本单元直流电阻P=UI=U²/R；恒定功率下E=Pt。", ("openstax_power", "openstax_ohm")),

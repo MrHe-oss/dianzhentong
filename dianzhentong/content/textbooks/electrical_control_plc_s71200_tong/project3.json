@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "book": {
+    "id": "electrical_control_plc_s71200_tong", "title": "电气控制与PLC应用技术（S7-1200）", "edition": "第1版",
+    "author": "童克波", "publisher": "机械工业出版社", "isbn": "978-7-111-73129-0", "published_at": "2023-07-24",
+    "source_url": "https://www.cmpedu.com/books/book/5606823.htm", "official": false,
+    "notice": "平台原创学习内容，仅按出版社目录建立映射，并非出版社官方配套资料。",
+    "course_ids": ["low_voltage_control_basics", "relay_contactor_control", "electrical_diagram_reading", "star_delta_starting", "time_relay_sequence_control"]
+  },
+  "project": {
+    "id": "project_3", "title": "项目3 位逻辑指令及程序编写",
+    "units": [{
+      "id": "p3_unit_1", "source_title": "项目3·任务1 位逻辑运算指令学习", "title": "位逻辑运算指令学习",
+      "goal": "把文字条件转换为布尔判断，并解释抽象逻辑路径和当前输出结果。项目3本轮仅开放本单元。",
+      "topic_ids": ["bit_contacts", "bit_combinations", "bit_assignment"],
+      "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": ["p3_unit_1"],
+      "worked_example": {
+        "title": "原创例题：两个请求与停止条件",
+        "prerequisites": "建议先学习项目2的布尔变量和程序逻辑；不要求项目2评测通过，不需要安装博途。",
+        "learning_goals": ["区分逻辑触点判断与真实按钮状态。", "从文字条件写出与、或、非组合式。", "说明普通赋值为何不自动保留上一结果。"],
+        "thinking_hint": "先分别求出‘至少一个请求’和‘没有停止请求’，再把两项结果合并。",
+        "common_mistakes": ["把‘任一成立’写成‘同时成立’。", "把T为真误读为允许运行。", "没有给出保持条件，却沿用上一次Y。"],
+        "source_url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_zhcn_20/basic-instructions/bit-logic-operations/bit-logic-instructions",
+        "scenario": "纸面模型有请求A、请求B、停止条件T。任一请求为真且T为假时，运行请求Y为真。每次完整执行这一赋值，Y只在此处赋值，没有上次状态参与。本模型不控制真实设备。",
+        "steps": ["定义变量：A和B为当前两个请求；T为真表示要求停止；Y为本次计算结果，全部是布尔量。", "拆分条件：M=A∨B表示至少一个请求成立；N=¬T表示停止条件不成立。", "计算结果：Y=M∧N。A假、B真、T假时，M真、N真，因此Y真。", "检查反例：把T改为真，N立即为假，本次Y为假；若A和B都撤回，即使上次Y为真，本次也为假。"],
+        "answer": "Y=(A∨B)∧¬T。或负责合并两个请求，非负责检查T为假，与要求这两项同时成立。这里是无记忆的组合逻辑，不是自锁保持程序。",
+        "practice": "本例A真、B假、T真，Y应为什么？",
+        "options": ["假，停止条件阻止请求", "真，有A即可", "沿用上次Y"],
+        "practice_answer": "假，停止条件阻止请求", "practice_explanation": "A∨B为真，但¬T为假，二者相与为假。没有保持条件。", "practice_question_id": "bit_example"
+      },
+      "topics": [
+        {
+          "id": "bit_contacts",
+          "card": {"title": "布尔状态与逻辑触点", "principle": "逻辑触点检查所关联布尔变量，而不是直接说明真实按钮的机械状态。", "role": "本单元把常开逻辑触点理解为检查真，把常闭逻辑触点理解为检查假。", "normal": "A为假时，检查A为真的条件不成立，检查A为假的条件成立。", "abnormal": "不能仅凭程序中的触点类型断定现场按钮是否按下。", "review": "先读清变量含义，再判断真假；不据此推断真实设备状态。"},
+          "lesson": {"minutes": 6, "lead": "情境：模拟资料只告诉你‘请求A为假’，能否据此断定某个真实按钮没有按下？不能，因为题目没有给出真实按钮与A的映射。",
+            "points": ["布尔量只有真、假两种状态；这里用1和0分别表示它们，不表示电压大小。", "在本单元条件判断中，常开逻辑触点检查关联位为真，常闭逻辑触点检查关联位为假。完整逻辑还要考虑其他条件。", "推理时先查变量定义，再读当前值，最后问本步骤检查真还是检查假；不要先想象按钮动作。", "常见误区：把程序里的‘常闭’当成对某个真实按钮的描述。平台只给出模拟变量，不能由此推断实际连接或设备状态。"],
+            "example": "A当前为假：条件A不成立，条件¬A成立。这只是在同一份资料上提出两个相反的问题。",
+            "question": "A为假时，检查A为假的条件是否成立？", "options": ["成立", "不成立", "必须知道真实按钮位置"], "answer": "成立", "explanation": "已给出布尔值和检查目标，¬A为真，无需引入真实设备信息。"},
+          "formulas": [{"title": "真假检查", "expression": "C_{true}=A, C_{false}=\\neg A", "symbols": ["A：给定布尔值", "Ctrue：检查A为真", "Cfalse：检查A为假"], "meaning": "只表达条件判断，不是物理触点状态或实际程序完整路径。"}]
+        },
+        {
+          "id": "bit_combinations",
+          "card": {"title": "与或非及组合条件", "principle": "先计算各条件，再按与、或、非及括号关系合并结果。", "role": "与要求全部成立，或允许至少一项成立，非翻转真假。", "normal": "A假、B真时，A∨B为真，A∧B为假。", "abnormal": "把‘任一个’写成‘全部’会改变允许的输入组合。", "review": "用一真一假的反例检查与、或是否写反。"},
+          "lesson": {"minutes": 7, "lead": "情境：请求A或请求B均可提出学习模型中的运行请求，但停止条件T能阻止它。怎样避免把长句直接猜成一个答案？",
+            "points": ["把‘至少一个请求’分成M=A∨B；即使A和B都真，或的结果仍为真。", "把‘停止条件不成立’分成N=¬T；题设规定T真表示停止，不能自行改写含义。", "推理顺序：先求M和N，再求Y=M∧N。括号明确了先合并两个请求，再施加停止条件。", "常见误区：将表达式写成A∨(B∧¬T)，使A可以绕过停止条件。用A真、T真就能发现区别。"],
+            "example": "A假、B真、T假：M真、N真，Y真；只把B改为假，M变假，Y也变假。",
+            "question": "A与B都真时，A∨B是什么？", "options": ["真", "假", "要看上一次结果"], "answer": "真", "explanation": "或表示至少一个为真，并不要求只能有一个为真。"},
+          "formulas": [{"title": "当前请求组合", "expression": "M=A\\lor B, N=\\neg T, Y=M\\land N", "symbols": ["A、B：当前请求", "T：停止条件", "M：至少一个请求", "N：没有停止请求", "Y：本次结果"], "meaning": "平台原创无记忆条件式；按本题变量含义解释，不代表通用控制程序。"}]
+        },
+        {
+          "id": "bit_assignment",
+          "card": {"title": "普通输出赋值与条件判断", "principle": "本例每次执行普通赋值，Y取当前组合条件的计算结果。", "role": "把判断结果写为当前布尔值，而不是自动生成保持逻辑。", "normal": "条件由真变假后，再次完整执行赋值，Y变假。", "abnormal": "不能仅因为上次Y为真，就断定本次仍保持真。", "review": "本例限定每次执行且Y只有一处赋值；不扩展到跳过执行、多处写入或真实输出时序。"},
+          "lesson": {"minutes": 6, "lead": "情境：上一次请求成立，Y为真；这一次请求全撤回。学生说‘既然已经运行，就会继续’，这个结论从哪里来？本题没有给出保持规则。",
+            "points": ["本单元用普通输出赋值理解‘把当前逻辑结果交给Y’；Y是学习模型中的结果变量。", "推理时重新代入这一次的A、B、T，得到真假后写入Y，不把上一结果当作额外请求。", "常见误区：把普通赋值等同于自锁。本例无记忆，条件不成立时完整执行该赋值，Y为假。", "结论有前提：该赋值每次都执行，Y只有这一处写入。不要把结论套到未执行的程序段或任意真实系统。"],
+            "example": "上一组A真、B假、T假得到Y真；下一组A假、B假、T假重新计算得到Y假。",
+            "question": "本例上一结果为真，本次两个请求都假且T假，重新计算Y为什么？", "options": ["假", "保持真", "随机决定"], "answer": "假", "explanation": "两个请求都假，或的结果为假，因此最终结果为假；本例不引用上一状态。"},
+          "formulas": [{"title": "无记忆赋值", "expression": "Y:=(A\\lor B)\\land\\neg T", "symbols": ["符号:=表示将右侧结果赋给Y", "A、B、T均取这次给定的值"], "meaning": "每次完整执行、单一写入的抽象模型，不模拟真实CPU响应时间。"}]
+        }
+      ]
+    }]
+  }
+}
