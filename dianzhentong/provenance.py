@@ -80,6 +80,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
 }
 
 CARD_PROVENANCE.update({
+    "plc_jog_request": _item("点动模型只使用当前布尔条件；普通赋值不自动保持。原创教学情境待专业复核。", ("siemens_bit_logic",)),
+    "plc_continuous_hold": _item("本例显式使用上一状态建立保持，不是赋值自动产生。原创模型待专业复核。", ("siemens_bit_logic",)),
+    "plc_jog_hold_compare": _item("两个独立模型使用相同条件比较，停止优先由本题公式规定；不模拟真实设备。原创推理待专业复核。", ("siemens_bit_logic",)),
     "direction_requests": _item("布尔请求与已有状态不同；本单元保持模型是原创推理，未经专业审核。", ("siemens_bit_logic",)),
     "direction_exclusion": _item("互斥避免模型双向同时有效；双请求停止是本题策略，不是厂家统一规定，未经专业审核。", ("siemens_bit_logic", "schneider_interlock")),
     "direction_transition": _item("先停止再换向仅是教学状态路径，不证明实际电机停稳；原创模型未经专业审核。", ("siemens_bit_logic",)),
