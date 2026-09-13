@@ -8,7 +8,7 @@ def test_all_three_textbook_units_have_complete_lessons():
     book = next(iter(BOOK_EDITION_MAPPINGS.values()))
     mapped_ids = {topic_id for item in BOOK_EDITION_MAPPINGS.values() for unit in item["chapters"] for topic_id in unit["topic_ids"]}
     assert mapped_ids == set(ALL_LESSON_TOPIC_IDS) == set(TEXTBOOK_LESSONS)
-    assert len(TEXTBOOK_LESSONS) == 42
+    assert len(TEXTBOOK_LESSONS) == 45
     for unit in book["chapters"]:
         assert sum(TEXTBOOK_LESSONS[item]["minutes"] for item in unit["topic_ids"]) >= 12
 
@@ -16,6 +16,6 @@ def test_all_three_textbook_units_have_complete_lessons():
 def test_v36_shows_unit_progress_and_project_summary():
     app = Path("app.py").read_text(encoding="utf-8")
     config = Path("dianzhentong/config.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "4.18"' in config and 'UI_STATE_VERSION = "4.18"' in app
+    assert 'APP_VERSION = "4.19"' in config and 'UI_STATE_VERSION = "4.19"' in app
     for phrase in ("本书已上线目录", "教材知识学习", "当前上线教材项目的知识小课已完成", "selected_textbook_chapter"):
         assert phrase in app

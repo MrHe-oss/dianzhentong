@@ -21,11 +21,11 @@ UNIT = 'p3_unit_1'
 
 def test_content_pool_sources_and_project2_unchanged():
     content = load_textbook_content(BOOK, 'project_3')
-    assert len(content['project']['units']) == 3
+    assert len(content['project']['units']) == 4
     unit = content['project']['units'][0]
     assert unit['id'] == UNIT and tuple(unit['topic_ids']) == TOPICS
     assert not unit['case_ids'] and not unit['experiment_ids']
-    assert len(BOOK_EDITION_MAPPINGS[BOOK]['chapters']) == 10
+    assert len(BOOK_EDITION_MAPPINGS[BOOK]['chapters']) == 11
     assert BOOK_EDITION_MAPPINGS[BOOK]['chapters'][7]['quiz_chapter_ids'] == (UNIT,)
     assert len([q for q in QUESTIONS if q.chapter_id == UNIT]) == 8
     pool = textbook_question_pool((UNIT,), 'bit_example')

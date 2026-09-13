@@ -26,7 +26,7 @@ def test_two_projects_are_loaded_into_catalog_and_search():
     projects = load_textbook_projects(BOOK_ID)
     assert [item["project"]["id"] for item in projects] == ["project_1", "project_2", "project_3"]
     book = BOOK_EDITION_MAPPINGS[BOOK_ID]
-    assert len(book["projects"]) == 3 and len(book["chapters"]) == 10
+    assert len(book["projects"]) == 3 and len(book["chapters"]) == 11
     results = search_textbooks(build_textbook_index([BOOK_ID]), "TIA 博途")
     assert results and all(item["chapter_index"] >= 3 for item in results)
 
@@ -44,6 +44,6 @@ def test_project2_has_siemens_source_mapping_and_safe_scope():
 def test_v43_ui_exposes_multiple_projects_without_fake_training():
     app = open("app.py", encoding="utf-8").read()
     config = open("dianzhentong/config.py", encoding="utf-8").read()
-    assert 'APP_VERSION = "4.18"' in config and 'UI_STATE_VERSION = "4.18"' in app
+    assert 'APP_VERSION = "4.19"' in config and 'UI_STATE_VERSION = "4.19"' in app
     for phrase in ("已上线项目", "本书已上线目录", "本项目专项题库将在后续版本加入", "本项目互动训练正在建设"):
         assert phrase in app

@@ -24,6 +24,11 @@ SOURCES: dict[str, dict[str, str]] = {
 SOURCES["siemens_bit_logic"] = {"title": "S7-1200 Bit logic instructions · V20", "publisher": "Siemens", "url": "https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_zhcn_20/basic-instructions/bit-logic-operations/bit-logic-instructions", "type": "厂家编程说明", "scope": "逻辑触点、布尔运算与普通输出赋值；原创组合情境仍待专业复核", "checked_on": "2026-09-10"}
 
 
+SOURCES["abb_star_delta"].update(title="ABB Softstarter Handbook · Star-delta start（第14页）", checked_on="2026-09-13")
+SOURCES["schneider_star_delta"]["checked_on"] = "2026-09-13"
+SOURCES["siemens_bit_logic"]["checked_on"] = "2026-09-13"
+
+
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
     return {"principle": principle, "sources": sources, "status": status}
 
@@ -80,6 +85,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
 }
 
 CARD_PROVENANCE.update({
+    "plc_sd_stages": _item("复用星形启动、转换等待与三角运行角色；具体分步状态模型为原创教学推理，待专业复核。", ("abb_star_delta", "schneider_star_delta")),
+    "plc_sd_transition": _item("先退出星形再进入三角；布尔条件仅为教学输入，不是实际定时或反馈。原创推理待专业复核。", ("schneider_star_delta", "siemens_bit_logic")),
+    "plc_sd_interlock": _item("星形与三角角色互斥；停止优先及每次一阶段是本题明确规则，不代表实际系统验证，待专业复核。", ("schneider_star_delta", "siemens_bit_logic")),
     "plc_jog_request": _item("点动模型只使用当前布尔条件；普通赋值不自动保持。原创教学情境待专业复核。", ("siemens_bit_logic",)),
     "plc_continuous_hold": _item("本例显式使用上一状态建立保持，不是赋值自动产生。原创模型待专业复核。", ("siemens_bit_logic",)),
     "plc_jog_hold_compare": _item("两个独立模型使用相同条件比较，停止优先由本题公式规定；不模拟真实设备。原创推理待专业复核。", ("siemens_bit_logic",)),
