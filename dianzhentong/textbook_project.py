@@ -20,7 +20,8 @@ def project_config(project_id="project_2"):
     if project_id not in PROJECT_IDS:
         raise ValueError("未知教材项目")
     units = tuple((i, u) for i, u in enumerate(BOOK_EDITION_MAPPINGS[BOOK_ID]["chapters"])
-                  if u["project_id"] == project_id)
+                  if u["project_id"] == project_id and
+                  set(u["quiz_chapter_ids"]) <= {f"p{project_id[-1]}_unit_{n}" for n in range(1, 5)})
     return {"scope": f"textbook:{BOOK_ID}:{project_id}", "title": f"项目{project_id[-1]}",
             "units": units, "chapters": frozenset(c for _, u in units for c in u["quiz_chapter_ids"])}
 

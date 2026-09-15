@@ -85,6 +85,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
 }
 
 CARD_PROVENANCE.update({
+    "traffic_stages": _item("布尔输出表示抽象状态；交通信号阶段及全红约定为原创简化模型，待专业复核，不是实际道路方案。", ("siemens_bit_logic",)),
+    "traffic_transition": _item("结束条件为模拟布尔输入；一次一阶段是平台观察规则，不表示CPU时序或真实配时，待专业复核。", ("siemens_bit_logic",)),
+    "traffic_exclusion": _item("绿灯互斥、停止优先仅是本题状态规则；不构成真实交通安全验证，原创推理待专业复核。", ("siemens_bit_logic",)),
     "plc_sd_stages": _item("复用星形启动、转换等待与三角运行角色；具体分步状态模型为原创教学推理，待专业复核。", ("abb_star_delta", "schneider_star_delta")),
     "plc_sd_transition": _item("先退出星形再进入三角；布尔条件仅为教学输入，不是实际定时或反馈。原创推理待专业复核。", ("schneider_star_delta", "siemens_bit_logic")),
     "plc_sd_interlock": _item("星形与三角角色互斥；停止优先及每次一阶段是本题明确规则，不代表实际系统验证，待专业复核。", ("schneider_star_delta", "siemens_bit_logic")),
