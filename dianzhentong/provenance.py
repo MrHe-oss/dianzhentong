@@ -27,6 +27,9 @@ SOURCES["siemens_bit_logic"] = {"title": "S7-1200 Bit logic instructions · V20"
 SOURCES["abb_star_delta"].update(title="ABB Softstarter Handbook · Star-delta start（第14页）", checked_on="2026-09-13")
 SOURCES["schneider_star_delta"]["checked_on"] = "2026-09-13"
 SOURCES["siemens_bit_logic"]["checked_on"] = "2026-09-13"
+from .move_logic import SOURCE_URL as MOVE_SOURCE_URL
+SOURCES["siemens_move"] = {"title": "MOVE: Move value · STEP 7 V20", "publisher": "Siemens", "url": MOVE_SOURCE_URL,
+    "type": "厂家编程说明", "scope": "源到目标的数据复制与使能；本单元独立同类型整数及无其他写入情境为原创简化模型", "checked_on": "2026-09-15"}
 
 
 def _item(principle: str, sources: tuple[str, ...], status: str = STATUS_PARTIAL) -> dict[str, object]:
@@ -85,6 +88,9 @@ CARD_PROVENANCE: dict[str, dict[str, object]] = {
 }
 
 CARD_PROVENANCE.update({
+    "move_source_target": _item("MOVE从源复制到目标；独立变量无其他写入的教学情境待专业复核。", ("siemens_move",)),
+    "move_execution": _item("使能控制执行；不执行且无其他写入时保留目标原值，单次观察模型待专业复核。", ("siemens_move",)),
+    "move_type_direction": _item("本轮限定同类型整数，不表示MOVE全部类型支持；方向与类型教学推理待专业复核。", ("siemens_move",)),
     "traffic_stages": _item("布尔输出表示抽象状态；交通信号阶段及全红约定为原创简化模型，待专业复核，不是实际道路方案。", ("siemens_bit_logic",)),
     "traffic_transition": _item("结束条件为模拟布尔输入；一次一阶段是平台观察规则，不表示CPU时序或真实配时，待专业复核。", ("siemens_bit_logic",)),
     "traffic_exclusion": _item("绿灯互斥、停止优先仅是本题状态规则；不构成真实交通安全验证，原创推理待专业复核。", ("siemens_bit_logic",)),

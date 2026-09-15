@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "book": {
+    "id": "electrical_control_plc_s71200_tong", "title": "电气控制与PLC应用技术（S7-1200）", "edition": "第1版",
+    "author": "童克波", "publisher": "机械工业出版社", "isbn": "978-7-111-73129-0", "published_at": "2023-07-24",
+    "source_url": "https://www.cmpedu.com/books/book/5606823.htm", "official": false,
+    "notice": "平台原创学习内容，仅按出版社目录建立映射，并非出版社官方配套资料。",
+    "course_ids": ["low_voltage_control_basics", "relay_contactor_control", "electrical_diagram_reading", "star_delta_starting", "time_relay_sequence_control"]
+  },
+  "project": {
+    "id": "project_4", "title": "项目4 数据指令及程序编写",
+    "units": [{
+      "id": "p4_unit_1", "source_title": "项目4·任务1 使用移动指令编程",
+      "title": "移动指令与数据传递基础", "goal": "区分源和目标，根据执行条件解释一次同类型整数复制，不将复制误解为交换、相加或持续绑定。",
+      "topic_ids": ["move_source_target", "move_execution", "move_type_direction"],
+      "case_ids": [], "experiment_ids": [], "quiz_chapter_ids": ["p4_unit_1"],
+      "worked_example": {
+        "title": "原创例题：复制给B之后，A和B分别是多少",
+        "prerequisites": "建议先学变量与布尔条件，不强制通过前序单元，无需安装博途。",
+        "learning_goals": ["正确区分源与目标。", "根据执行条件判断更新或保留。", "用反例区分复制、交换和自动跟随。"],
+        "thinking_hint": "先明确A提供值、B接收值，再检查执行条件；不要修改源或把两个值相加。",
+        "common_mistakes": ["复制后源被清空。", "把复制当交换。", "未执行时目标自动跟随源。"],
+        "source_url": "https://docs.tia.siemens.cloud/r/en-us/v20/lad-s7-1200-s7-1500/move-operations-s7-1200-s7-1500/move-move-value-s7-1200-s7-1500",
+        "scenario": "A和B是两个独立的同类型整数变量，没有其他写入。A=12、B=3，执行条件真。仅执行一次从A到B的复制，不涉及地址重叠或类型转换。",
+        "steps": ["定义角色：源A提供12，目标B原来为3。", "检查执行条件：真，所以本次执行复制。", "更新目标：B取源A的当前值12，A仍为12。", "检查反例：若执行条件假，B保留3；若后来只改变A而不再次执行，B不自动跟随。"],
+        "answer": "A=12，B=12。源不被清空，目标原值被替换；不是交换或相加。原创情境待专业复核。",
+        "practice": "题设A=12、B=3，执行条件真，复制A到B一次后结果是什么？",
+        "options": ["A=12，B=12", "A=3，B=12", "A=0，B=12"], "practice_answer": "A=12，B=12",
+        "practice_explanation": "仅更新目标B为12，源A不变。", "practice_question_id": "move_example"
+      },
+      "topics": [
+        {
+          "id": "move_source_target",
+          "card": {"title": "源与目标", "principle": "源提供当前值，目标接收副本；在本题独立变量条件下复制不改变源。", "role": "从A复制到B，表示B被更新为A当前的值，不是交换或相加。", "normal": "A=12、B=3，执行复制后A=12、B=12。", "abnormal": "误区：认为移动意味着剪切并清空源。这里是复制，源保留。", "review": "先圈出谁提供值、谁被修改，再判断执行结果。"},
+          "lesson": {"minutes": 6, "lead": "情境：把一份模拟数量记录从变量A复制到变量B，原记录还在吗？", "points": ["本单元A、B独立且同为整数，不存在地址重叠或其他写入。", "推理：读取源的当前值，将它写为目标的新值；源不承担接收职责。", "复制不是A与B交换，也不是把两个数相加。", "常见误区：把移动理解为剪切，执行后将源清零。"], "example": "A=-4、B=9，执行从A到B复制后两个值都为-4，不是5。", "question": "复制A到B时，哪个变量接收新值？", "options": ["B", "A", "两个都清零"], "answer": "B", "explanation": "B是目标；本题A作为独立源不被修改。"}, "formulas": []
+        },
+        {
+          "id": "move_execution",
+          "card": {"title": "执行条件与更新", "principle": "执行条件真时复制，假时本次不复制；在无其他写入的题设中目标保持原值。", "role": "每次执行读取当次源值，复制不建立持续同步关系。", "normal": "先复制5给B，后只把A改为9且不执行，B仍为5。", "abnormal": "误区：条件假会清零目标，或源变化后目标必定同步。", "review": "区分准备输入、执行一次、读取结果，不把模型当作完整扫描。"},
+          "lesson": {"minutes": 6, "lead": "情境：第一次复制后A和B都为5，后来A变成9，B一定变吗？先问有没有再次执行。", "points": ["没有再次执行且无其他写入，B仍保留上次的5。", "再次执行且条件真，B才接收A的当前值9。", "条件假不执行本次复制，不是写入零值。", "常见误区：把复制看成长期绑定；本轮只观察单次复制，没有连续动画。"], "example": "A=0、B=8且执行条件真，B更新为0；源值为0不等于执行条件假。", "question": "A=7、B=2且执行条件假，无其他写入时B是多少？", "options": ["2", "7", "0"], "answer": "2", "explanation": "本次未复制，B保留原值2。"}, "formulas": []
+        },
+        {
+          "id": "move_type_direction",
+          "card": {"title": "类型与赋值方向", "principle": "先确认源和目标角色，再确认本题限定的同类型整数条件。", "role": "本单元不模拟浮点数、字符串、数组或自动转换；这不代表MOVE只支持整数。", "normal": "要让B得到A当前值，应指定A为源、B为目标。", "abnormal": "误区：把源和目标反写，或未经类型确认就假定会自动取整。", "review": "平台输入范围仅为演示限制，不是PLC类型范围或工程选型依据。"},
+          "lesson": {"minutes": 6, "lead": "情境：要求B采用A的记录，学生却把B当源、A当目标，结果改变了错误的变量。", "points": ["先用一句话描述方向：谁提供数据，谁应该被修改。", "本题把两者限定为同类型整数，暂不讨论类型转换和其他数据类型。", "数值相同也不能据此证明方向正确，可用两个不同数作反例。", "常见误区：把本轮简化范围当作MOVE所有能力，或把复制当作自动取整。"], "example": "A=12、B=3，A到B使B为12；反方向会使A为3，两个任务不同。", "question": "本轮模型接受哪种数据？", "options": ["同类型整数", "字符串自动转整数", "小数自动四舍五入"], "answer": "同类型整数", "explanation": "本轮主动限定同类型整数，不模拟其他类型和转换。"}, "formulas": []
+        }
+      ]
+    }]
+  }
+}

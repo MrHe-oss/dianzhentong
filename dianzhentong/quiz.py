@@ -189,6 +189,7 @@ from .direction_logic import QUESTION_SPECS as DIRECTION_QUESTIONS, OPTION_FEEDB
 from .jog_hold import QUESTION_SPECS as JOG_HOLD_QUESTIONS, OPTION_FEEDBACK as JOG_HOLD_FEEDBACK
 from .plc_star_delta import QUESTION_SPECS as PLC_SD_QUESTIONS, OPTION_FEEDBACK as PLC_SD_FEEDBACK
 from .traffic_logic import QUESTION_SPECS as TRAFFIC_QUESTIONS, OPTION_FEEDBACK as TRAFFIC_FEEDBACK
+from .move_logic import QUESTION_SPECS as MOVE_QUESTIONS, OPTION_FEEDBACK as MOVE_FEEDBACK
 
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k != "card"}) for row in TIA_QUESTIONS)
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k != "card"}) for row in PROJECT_QUESTIONS)
@@ -197,6 +198,7 @@ QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k not in {"ca
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k not in {"card", "wrong"}}) for row in JOG_HOLD_QUESTIONS)
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k not in {"card", "wrong"}}) for row in PLC_SD_QUESTIONS)
 QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k not in {"card", "wrong"}}) for row in TRAFFIC_QUESTIONS)
+QUESTIONS += tuple(QuizQuestion(**{k: v for k, v in row.items() if k not in {"card", "wrong"}}) for row in MOVE_QUESTIONS)
 QUESTION_MAP = {item.id: item for item in QUESTIONS}
 
 QUESTION_CARD_MAP = {
@@ -275,6 +277,8 @@ QUESTION_CARD_MAP.update({row['id']: row['card'] for row in PLC_SD_QUESTIONS})
 OPTION_FEEDBACK.update(PLC_SD_FEEDBACK)
 QUESTION_CARD_MAP.update({row['id']: row['card'] for row in TRAFFIC_QUESTIONS})
 OPTION_FEEDBACK.update(TRAFFIC_FEEDBACK)
+QUESTION_CARD_MAP.update({row['id']: row['card'] for row in MOVE_QUESTIONS})
+OPTION_FEEDBACK.update(MOVE_FEEDBACK)
 
 
 def card_id_for_question(question_id: str) -> str:
@@ -322,7 +326,7 @@ def questions_for_chapter(chapter_id: str) -> tuple[QuizQuestion, ...]:
 def textbook_question_pool(chapter_ids: Sequence[str], example_question_id: str | None = None) -> tuple[QuizQuestion, ...]:
     """仅已建设独立题库的单元排除例题；其余单元保留旧行为。"""
     return tuple(q for q in QUESTIONS if q.chapter_id in chapter_ids
-                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2", "p2_unit_3", "p2_unit_4", "p3_unit_1", "p3_unit_2", "p3_unit_3", "p3_unit_4", "p3_unit_5"}
+                 and not (q.chapter_id in {"p2_unit_1", "p2_unit_2", "p2_unit_3", "p2_unit_4", "p3_unit_1", "p3_unit_2", "p3_unit_3", "p3_unit_4", "p3_unit_5", "p4_unit_1"}
                           and q.id == example_question_id))
 
 

@@ -6,18 +6,15 @@ const {chromium}=require('playwright');
  try {
   await page.goto(process.env.LAB_URL || 'https://dianzhentong.streamlit.app', {waitUntil:'domcontentloaded',timeout:45000});
   await page.getByRole('button',{name:'进入教材学习',exact:true}).waitFor({timeout:45000});
-  if(!(await page.locator('body').innerText()).includes('4.21')) throw Error('Expected v4.21');
+  if(!(await page.locator('body').innerText()).includes('4.22')) throw Error('Expected v4.22');
   await page.getByRole('button',{name:'进入教材学习',exact:true}).click();
   const chapter=page.getByTestId('stSelectbox').filter({hasText:'选择章节'}).getByRole('combobox');
-  await chapter.click(); await chapter.fill('PLC交通灯顺序控制的逻辑学习');
-  await page.getByRole('option').filter({hasText:'PLC交通灯顺序控制的逻辑学习'}).click();
+  await chapter.click(); await chapter.fill('移动指令与数据传递基础');
+  await page.getByRole('option').filter({hasText:'移动指令与数据传递基础'}).click();
   await page.getByText(/题库总量 8 题 · 可用于独立测验 7 题/).waitFor();
-  await page.getByRole('heading',{name:'条件互动：交通信号阶段循环',exact:true}).waitFor();
-  await page.getByRole('button',{name:'项目3学习小结与综合复习',exact:true}).click();
-  await page.getByRole('heading',{name:'四种教学逻辑的区别',exact:true}).waitFor();
-  await page.getByRole('button',{name:'开始项目3综合测验',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'条件互动：单次数据复制',exact:true}).waitFor();
   if(await page.getByTestId('stException').count()) throw Error('Application exception');
-  console.log(JSON.stringify({url:page.url(),version:'4.21',traffic:true,project3Review:true}));
+  console.log(JSON.stringify({url:page.url(),version:'4.22',move:true,independentPool:7}));
  } catch(error) {
   console.error(JSON.stringify({url:page.url(),error:String(error),visibleText:(await page.locator('body').innerText().catch(()=>'' )).slice(0,1800)}));
   process.exitCode=1;

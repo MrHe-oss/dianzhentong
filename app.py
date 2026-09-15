@@ -67,6 +67,7 @@ from dianzhentong.direction_logic_ui import render_direction_logic
 from dianzhentong.jog_hold_ui import render_jog_hold
 from dianzhentong.plc_star_delta_ui import render_plc_star_delta
 from dianzhentong.traffic_logic_ui import render_traffic
+from dianzhentong.move_logic_ui import render_move
 from dianzhentong.circuit_ui import numeric_answer_input, render_resistor_explorer
 from dianzhentong.example_ui import render_example_reasoning
 from dianzhentong.plc_lab import BOOK_ID as PLC_BOOK_ID, LABS, LabSession
@@ -119,7 +120,7 @@ make_diagram_record = storage_module.make_diagram_record
 make_capstone_record = storage_module.make_capstone_record
 StudyNote = storage_module.StudyNote
 
-UI_STATE_VERSION = "4.21"
+UI_STATE_VERSION = "4.22"
 STORAGE_CACHE_VERSION = "4.15-project-review"
 st.set_page_config(page_title="电诊通", page_icon="⚡", layout="centered")
 st.markdown("""
@@ -2210,6 +2211,8 @@ elif stage == 20:
         render_plc_star_delta("plc_sd_unit")
     if "p3_unit_5" in mapped_chapter["quiz_chapter_ids"]:
         render_traffic("traffic_unit")
+    if "p4_unit_1" in mapped_chapter["quiz_chapter_ids"]:
+        render_move("move_unit")
 
     unit_labs = {key: lab for key, lab in LABS.items()
                  if selected_book_id == PLC_BOOK_ID and chapter_index == lab["unit"]}
